@@ -298,7 +298,7 @@ async function connectToWhatsApp() {
     auth: state,
     // printQRInTerminal: true,
     logger: pino({ level: "silent" }), // nonaktifkan log awal
-    browser: ["CCTV Monitoring BOT", os.release(), "Fajar"],
+    browser: ["CCTV Monitoring BOT","Windows", "Fajar"],
   });
 
   sock.ev.on("connection.update", (update) => {
