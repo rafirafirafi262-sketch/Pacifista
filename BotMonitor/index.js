@@ -298,7 +298,7 @@ async function connectToWhatsApp() {
       );
       cekStatusMonitor();
       setInterval(cekStatusMonitor, 60 * 1000);
-      setInterval(runEscalationChecks, 30 * 1000);
+      setInterval(runEscalationChecks, 60 * 1000);
       // ------------------------
     }
   });
