@@ -6,6 +6,7 @@ const {
 const qrcode = require("qrcode-terminal");
 const puppeteer = require("puppeteer-core");
 const cheerio = require("cheerio");
+const pino = require("pino");
 
 // --- PENGATURAN ---
 const STATUS_PAGES = [
@@ -268,7 +269,11 @@ function handleAcknowledgement(from) {
 
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState("Session_baileys");
-  sock = makeWASocket({ auth: state, printQRInTerminal: true });
+  sock = makeWASocket({
+    auth: state, 
+    printQRInTerminal: true,
+    logger: pino({level: "silent"}); // nonaktifkan log awal
+});
 
   sock.ev.on("connection.update", (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -282,6 +287,9 @@ async function connectToWhatsApp() {
       if (shouldReconnect) {
         console.log("Koneksi terputus, menyambungkan kembali...");
         connectToWhatsApp();
+      } else {
+        console.log("🚫 Logout terdeteksi. QR baru akan dibuat...");
+        regenerateSession();
       }
     } else if (connection === "open") {
       console.log("Berhasil terhubung ke WhatsApp!");
