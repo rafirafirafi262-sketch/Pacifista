@@ -14,7 +14,7 @@ const STATUS_PAGES = [
 ];
 
 const CHROME_PATH =
-  "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe";
+  "/usr/bin/chromium";
 
 const KUMA_BASE_URL = "http://172.16.100.10";
 let sock;
