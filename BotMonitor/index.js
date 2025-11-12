@@ -14,8 +14,7 @@ const STATUS_PAGES = [
   // { name: "JSS", slug: "bot-jss" },
 ];
 
-const CHROME_PATH =
-  "/usr/bin/chromium";
+const CHROME_PATH = "/usr/bin/chromium";
 
 const KUMA_BASE_URL = "http://172.16.100.10";
 let sock;
@@ -34,7 +33,10 @@ const HIERARCHY = {
 };
 
 async function cekStatusMonitor() {
-  console.log("🔍 Mengecek perubahan status monitor...", new Date().toLocaleTimeString());
+  console.log(
+    "🔍 Mengecek perubahan status monitor...",
+    new Date().toLocaleTimeString()
+  );
 
   let browser = null;
   const messageToSend = [];
@@ -43,7 +45,12 @@ async function cekStatusMonitor() {
     browser = await puppeteer.launch({
       executablePath: "/usr/bin/chromium",
       headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox","--disable-gpu","--disable-dev-shm-usage"],
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+      ],
     });
 
     for (const pageInfo of STATUS_PAGES) {
@@ -72,7 +79,6 @@ async function cekStatusMonitor() {
 
         if (currentStatus === "offline") {
           monitorDownCount[key]++;
-
 
           // ✅ Set waktu down hanya sekali (saat pertama kali down)
           if (monitorDownCount[key] === 1) {
@@ -117,9 +123,10 @@ async function cekStatusMonitor() {
     if (messageToSend.length > 0) {
       const activeDownTimes = Object.values(monitorDownTime);
 
-      const earliestDownTimes = activeDownTimes.length > 0
-        ? new Date(Math.min(...activeDownTimes)).toLocaleString("id-ID")
-        : "N/A";
+      const earliestDownTimes =
+        activeDownTimes.length > 0
+          ? new Date(Math.min(...activeDownTimes)).toLocaleString("id-ID")
+          : "N/A";
 
       const now = new Date().toLocaleString("id-ID");
       const title = `LAPORAN MONITORING SYSTEM\n${now} \n\n DOWN SEJAK ${earliestDownTimes}\n\n`;
@@ -267,14 +274,32 @@ function handleAcknowledgement(from) {
   }
 }
 
+async function regenerateSession() {
+  console.log(
+    "⚠️ Sesi terlogout. Menghapus session lama dan menyiapkan QR baru..."
+  );
+  const sessionPath = path.join(__dirname, "Session_baileys");
+
+  try {
+    if (fs.existsSync(sessionPath)) {
+      fs.rmSync(sessionPath, { recursive: true, force: true });
+      console.log("🧹 Folder Session_baileys telah dihapus.");
+    }
+  } catch (err) {
+    console.log("❌ Gagal menghapus folder session:", err.message);
+  }
+  console.log("🔄 Membuat sesi baru dan menampilkan QR Code baru...");
+  await connectToWhatsApp();
+}
+
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState("Session_baileys");
   sock = makeWASocket({
-    auth: state, 
-    // printQRInTerminal: true, 
-    logger: pino({level: "silent"}), // nonaktifkan log awal
-    browser: ["CCTV Monitoring BOT",os.release(),"Fajar"]
-});
+    auth: state,
+    // printQRInTerminal: true,
+    logger: pino({ level: "silent" }), // nonaktifkan log awal
+    browser: ["CCTV Monitoring BOT", os.release(), "Fajar"],
+  });
 
   sock.ev.on("connection.update", (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -315,7 +340,7 @@ async function connectToWhatsApp() {
       msg.message.extendedTextMessage?.text ||
       ""
     )
-    
+
       .toLowerCase()
       .trim();
 
@@ -327,13 +352,13 @@ async function connectToWhatsApp() {
         await sock.sendMessage(from, {
           text: "✅ Konfirmasi diterima. Status eskalasi telah dihentikan.",
         });
-        console.log()
+        console.log();
         handleAcknowledgement(from);
-      }else{
-        console.log('✅ ini bukan konfirmasi')
+      } else {
+        console.log("✅ ini bukan konfirmasi");
       }
     }
-  }); 
+  });
 
   sock.ev.on("creds.update", saveCreds);
 }
