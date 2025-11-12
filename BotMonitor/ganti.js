@@ -40,9 +40,9 @@ async function cekStatusMonitor() {
 
   try {
     browser = await puppeteer.launch({
-      executablePath: CHROME_PATH,
+      executablePath: "/usr/bin/chromium",
       headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox","--disable-gpu","--disable-dev-shm-usage"],
     });
 
     for (const pageInfo of STATUS_PAGES) {
