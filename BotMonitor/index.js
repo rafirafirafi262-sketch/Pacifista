@@ -48,7 +48,7 @@ async function cekStatusMonitor() {
     for (const pageInfo of STATUS_PAGES) {
       const url = `${KUMA_BASE_URL}/status/${pageInfo.slug}`;
       const page = await browser.newPage();
-      await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+      await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
       await page.waitForSelector(".item-name");
       await page.waitForSelector(".badge.bg-primary, .badge.bg-danger");
       const html = await page.content();
