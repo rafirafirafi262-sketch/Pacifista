@@ -29,9 +29,9 @@ const monitorDownTime = {};
 const sentOffline = {}; // ✅ DIPINDAHKAN KE SCOPE GLOBAL agar persisten
 
 const HIERARCHY = {
-  admin: "628995897629@s.whatsapp.net",
+  admin: "6285934964784@s.whatsapp.net",
   atasan: "6282283595329@s.whatsapp.net",
-  pimpinan: "6285934964784@s.whatsapp.net",
+  pimpinan: "628995897629@s.whatsapp.net",
 };
 
 async function cekStatusMonitor() {
