@@ -6,6 +6,8 @@ const {
 const qrcode = require("qrcode-terminal");
 const puppeteer = require("puppeteer-core");
 const cheerio = require("cheerio");
+const fs = require("fs");
+const path = require("path");
 const pino = require("pino");
 
 // --- PENGATURAN ---
