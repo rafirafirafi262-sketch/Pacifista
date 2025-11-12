@@ -272,7 +272,8 @@ async function connectToWhatsApp() {
   sock = makeWASocket({
     auth: state, 
     // printQRInTerminal: true, 
-    logger: pino({level: "silent"}) // nonaktifkan log awal
+    logger: pino({level: "silent"}), // nonaktifkan log awal
+    browser: ["CCTV Monitoring BOT",os.release(),"Fajar"]
 });
 
   sock.ev.on("connection.update", (update) => {
