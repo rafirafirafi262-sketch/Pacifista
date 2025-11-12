@@ -1,0 +1,20 @@
+- Senin 27 October = Masuk magang jam 09:00 pembelajaran proyek seputar monitoring cctv public, jss, wifi sekolah yang di kirim dalam interval tertentu dan mulai membuat dan mengembangkan bot
+
+- Selasa 28 October = Masuk magang jam 15:50 Melanjutkan pengembangan fitur bot dan berhasil membuat fitur pelaporan Ketika ada yang down
+
+- Rabu 29 October = Masuk jam 16:02 Membantu mempersiapkan alat dan melakukan test demo agar saat kunjungan industry besok hari alat dapat digunakan dengan aman. Melakukan pelaporan fitur yang sudah dikembangkan kepada pimpinan
+
+- Kamis 30 October = Masuk jam 16:02 Melakukan perbaikan pada fitur eskalasi (auto forward ke atasan) dan bereksperimen dengan iot mencoba memunculkan teks pada modul Display 1602A dan modul ESP32 S2MINI
+
+- Jumat 31 October = Masuk jam 08:30 Melakukan perbaikan lanjutan pada fitur eskalasi monitoring bot dan penambahan fungsi anti spam agar tidak terjadi spam yang berlebih. Mempelajari IOT dengan modul led 1602A dengan esp32 yang sudah  bisa menampilkan kata yang di input di arduino
+
+- Selasa 4 Nov = Masuk jam 16:00 sesuai dengan jadwal perusahaan, melakukan pendataan pada perangkat access point yang akan digunakan
+
+- Rabu 5 Nov = Masuk jam 08:04 seperti di jadwal lalu melanjutkan project monitoring melakukan test jalan server local selama satu hari penuh dulu kemudian membuat dokumentasi untuk projekan monitoring cctv menggunakan bot wa, melakukan service terhadap laptop teman, melakukan pembersihan kode
+
+- Kamis 6 nov = masuk di jam 08:02 melanjutkan project, mempelajari arsitektur komputer membersihkan code bot monitoring, dan melakukan testing
+
+- Jum'at 7 nov = masuk di jam 08:03 bot kembali error melakukan perbaikan, dan mengirimkan dokumentasi bot
+
+- Senin 10 Nov = Melakukan penyesuaian terhadap bot dan melakukan revisi pada dokumentasi sesuai arahan
+
