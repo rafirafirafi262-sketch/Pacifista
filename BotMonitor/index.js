@@ -33,8 +33,14 @@ const HIERARCHY = {
   atasan: "6282283595329@s.whatsapp.net",
   pimpinan: "628995897629@s.whatsapp.net",
 };
-
+let isChecking = false;
 async function cekStatusMonitor() {
+  if (isChecking) {
+    console.log("⏳ Pengecekan sebelumnya belum selesai, skip...");
+    return; // ❗ skip eksekusi kalau masih jalan sebelumnya
+  }
+  isChecking = true; // 🔒 lock mulai
+
   console.log(
     "🔍 Mengecek perubahan status monitor...",
     new Date().toLocaleTimeString()
@@ -88,7 +94,7 @@ async function cekStatusMonitor() {
           }
 
           // ✅ HANYA SATU PENGECEKAN untuk notifikasi DOWN 10 menit
-          if (monitorDownCount[key] === 10) {
+          if (monitorDownCount[key] === 1) {
             const now = new Date().toLocaleString("id-ID");
             const message = `🔴 ${key}`;
             console.log("📤 Kirim notifikasi DOWN 10 menit:", message);
@@ -120,16 +126,15 @@ async function cekStatusMonitor() {
         }
       }
     }
-
+  //let lastReportTime = 0;
+    
     // ✅ Kirim pesan gabungan jika ada
     if (messageToSend.length > 0) {
       const activeDownTimes = Object.values(monitorDownTime);
-
       const earliestDownTimes =
         activeDownTimes.length > 0
           ? new Date(Math.min(...activeDownTimes)).toLocaleString("id-ID")
           : "N/A";
-
       const now = new Date().toLocaleString("id-ID");
       const title = `LAPORAN MONITORING SYSTEM\n${now} \n\n DOWN SEJAK ${earliestDownTimes}\n\n`;
       const bodyMessages = messageToSend.join("\n");
@@ -144,37 +149,54 @@ async function cekStatusMonitor() {
   } finally {
     console.log("✅ Pemeriksaan selesai. Menutup browser..");
     if (browser) await browser.close();
+     isChecking = false;
   }
 }
+ let isEscalating = false;
 
-function runEscalationChecks() {
-  const now = Date.now();
-  const shouldEscalateToAtasan = [];
-  const shouldEscalateToPimpinan = [];
+// Ganti fungsi lama dengan ini
+async function runEscalationChecks() {
+  if (isEscalating) {
+    console.log("⏳ Proses eskalasi sebelumnya belum selesai, skip...");
+    return;
+  }
 
-  // Batas waktu tunggu (dalam milidetik)
-  const ATASAN_WAIT_MS = 20 * 60 * 1000; // Contoh: 10 menit (Bisa disesuaikan)
-  const PIMPINAN_WAIT_MS = 40 * 60 * 1000; // 30 menit
+  isEscalating = true; // 🔒 lock aktif
+  console.log("🚀 Menjalankan pengecekan eskalasi...");
 
-  for (const [key, esc] of Object.entries(escalationQueue)) {
-    const elapsed = now - esc.lastSent;
+  try {
+    const now = Date.now();
+    const shouldEscalateToAtasan = [];
+    const shouldEscalateToPimpinan = [];
 
-    if (esc.level === "admin" && elapsed >= ATASAN_WAIT_MS) {
-      // Admin tidak merespons setelah ATASAN_WAIT_MS
-      shouldEscalateToAtasan.push(key);
-    } else if (esc.level === "atasan" && elapsed >= PIMPINAN_WAIT_MS) {
-      // Atasan tidak merespons setelah PIMPINAN_WAIT_MS
-      shouldEscalateToPimpinan.push(key);
+    // Batas waktu tunggu (dalam milidetik)
+    const ATASAN_WAIT_MS = 20 * 60 * 1000; // 20 menit
+    const PIMPINAN_WAIT_MS = 40 * 60 * 1000; // 40 menit
+
+    for (const [key, esc] of Object.entries(escalationQueue)) {
+      const elapsed = now - esc.lastSent;
+
+      if (esc.level === "admin" && elapsed >= ATASAN_WAIT_MS) {
+        shouldEscalateToAtasan.push(key);
+      } else if (esc.level === "atasan" && elapsed >= PIMPINAN_WAIT_MS) {
+        shouldEscalateToPimpinan.push(key);
+      }
     }
-  }
 
-  // Kirim Batch Eskalasi (jika ada)
-  if (shouldEscalateToAtasan.length > 0) {
-    sendBatchEscalation("atasan", shouldEscalateToAtasan);
-  }
+    // Kirim Batch Eskalasi jika ada
+    if (shouldEscalateToAtasan.length > 0) {
+      await sendBatchEscalation("atasan", shouldEscalateToAtasan);
+    }
 
-  if (shouldEscalateToPimpinan.length > 0) {
-    sendBatchEscalation("pimpinan", shouldEscalateToPimpinan);
+    if (shouldEscalateToPimpinan.length > 0) {
+      await sendBatchEscalation("pimpinan", shouldEscalateToPimpinan);
+    }
+
+  } catch (err) {
+    console.error("❌ Error saat menjalankan eskalasi:", err.message);
+  } finally {
+    isEscalating = false; // 🔓 unlock agar bisa jalan lagi nanti
+    console.log("✅ Pengecekan eskalasi selesai.\n");
   }
 }
 
@@ -322,14 +344,15 @@ async function connectToWhatsApp() {
     } else if (connection === "open") {
       console.log("Berhasil terhubung ke WhatsApp!");
       console.log(
-        "Penjadwalan aktif. Bot akan mengirim laporan 10 menit sekali"
+        "Penjadwalan aktif.Bot akan mengecek CCTV setiap 10 menit dan mengirim laporan setiap 1 jam"
       );
       cekStatusMonitor();
-      setInterval(cekStatusMonitor, 60 * 1000);
-      setInterval(runEscalationChecks, 60 * 1000);
+      setInterval(cekStatusMonitor, 10 * 60 * 1000);
+      setInterval(runEscalationChecks,60 * 60 * 1000);
       // ------------------------
     }
   });
+ 
 
   //Fungsi Mengecek Balasan dari admin
   sock.ev.on("messages.upsert", async ({ messages }) => {
