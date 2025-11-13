@@ -94,20 +94,6 @@ async function cekStatusMonitor() {
         if (currentStatus === "offline") {
           monitorDownCount[key]++;
 
-    // =========================================
-// ✅ Pengecekan status CCTV & pengiriman notifikasi
-// =========================================
-// for (const key of Object.keys(statusMonitor)) {
-  // const isDown = statusMonitor[key] === "DOWN";
-
-  // if (isDown) {
-  //   // Tambah hitungan down time
-  //   monitorDownCount[key] = (monitorDownCount[key] || 0) + 1;
-
-  //   // Simpan waktu pertama kali down
-  //   if (!monitorDownTime[key]) {
-  //     monitorDownTime[key] = Date.now();
-  //   // }
 
     // ✅ Kirim notifikasi hanya sekali per jam (setiap 6x loop 10 menit)
     // contoh: 10 menit * 6 = 60 menit
