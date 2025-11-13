@@ -15,6 +15,12 @@ const STATUS_PAGES = [
   { name: "CCTV Publik", slug: "bot-cctvpublic" },
   // { name: "JSS", slug: "bot-jss" },
 ];
+// Global control flags
+let monitoringStarted = false;      // mencegah double interval saat reconnect
+let escalationStarted = false;      // sama untuk eskalasi
+let firstRun = true;                // treat first check as baseline (jangan kirim notifikasi DOWN)
+let lastRegenerateTime = 0;         // cooldown untuk regenerate session (ms)
+
 
 const CHROME_PATH = "/usr/bin/chromium";
 
@@ -88,44 +94,57 @@ async function cekStatusMonitor() {
         if (currentStatus === "offline") {
           monitorDownCount[key]++;
 
-          // ✅ Set waktu down hanya sekali (saat pertama kali down)
-          if (monitorDownCount[key] === 1) {
-            monitorDownTime[key] = Date.now();
-          }
+    // =========================================
+// ✅ Pengecekan status CCTV & pengiriman notifikasi
+// =========================================
+for (const key of Object.keys(statusMonitor)) {
+  const isDown = statusMonitor[key] === "DOWN";
 
-          // ✅ HANYA SATU PENGECEKAN untuk notifikasi DOWN 10 menit
-          if (monitorDownCount[key] === 1) {
-            const now = new Date().toLocaleString("id-ID");
-            const message = `🔴 ${key}`;
-            console.log("📤 Kirim notifikasi DOWN 10 menit:", message);
-            messageToSend.push(message);
+  if (isDown) {
+    // Tambah hitungan down time
+    monitorDownCount[key] = (monitorDownCount[key] || 0) + 1;
 
-            // ✅ Tandai bahwa status offline sudah dikirim
-            sentOffline[key] = true;
+    // Simpan waktu pertama kali down
+    if (!monitorDownTime[key]) {
+      monitorDownTime[key] = Date.now();
+    }
 
-            // ✅ Masukkan ke escalation queue HANYA SEKALI
-            if (!escalationQueue[key]) {
-              escalationQueue[key] = { level: "admin", lastSent: Date.now() };
-            }
-          }
-        } else {
-          // ✅ Monitor kembali ONLINE
-          if (sentOffline[key]) {
-            const now = new Date().toLocaleString("id-ID");
-            const message = `🟢 *${key}* telah kembali ONLINE pada ${now}`;
-            console.log("📤 Kirim notifikasi ONLINE:", message);
-            messageToSend.push(message);
+    // ✅ Kirim notifikasi hanya sekali per jam (setiap 6x loop 10 menit)
+    // contoh: 10 menit * 6 = 60 menit
+    if (monitorDownCount[key] === 1 || monitorDownCount[key] % 6 === 0) {
+      const now = new Date().toLocaleString("id-ID");
+      const message = `🔴 *${key}* terdeteksi OFFLINE sejak ${new Date(
+        monitorDownTime[key]
+      ).toLocaleString("id-ID")} (cek: ${now})`;
+      console.log("📤 Kirim notifikasi DOWN:", message);
+      messageToSend.push(message);
 
-            // ✅ Reset semua state terkait monitor ini
-            delete sentOffline[key];
-          }
+      sentOffline[key] = true;
 
-          monitorDownCount[key] = 0;
-          delete escalationQueue[key];
-          delete monitorDownTime[key];
-        }
+      // ✅ Tambahkan ke escalation queue hanya sekali
+      if (!escalationQueue[key]) {
+        escalationQueue[key] = { level: "admin", lastSent: Date.now() };
+      } else {
+        escalationQueue[key].lastSent = Date.now(); // update waktu terakhir kirim
       }
     }
+  } else {
+    // ✅ Jika kembali ONLINE
+    if (sentOffline[key]) {
+      const now = new Date().toLocaleString("id-ID");
+      const message = `🟢 *${key}* telah kembali ONLINE pada ${now}`;
+      console.log("📤 Kirim notifikasi ONLINE:", message);
+      messageToSend.push(message);
+
+      // Reset semua state terkait monitor ini
+      delete sentOffline[key];
+      delete escalationQueue[key];
+      delete monitorDownCount[key];
+      delete monitorDownTime[key];
+    }
+  }
+}
+
   //let lastReportTime = 0;
     
     // ✅ Kirim pesan gabungan jika ada
@@ -272,14 +291,14 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
   );
 
   try {
+    // small delay to avoid burst
+    await new Promise(r => setTimeout(r, 1500));
     await sock.sendMessage(targetHierarchy, { text: finalMessage });
     console.log(`✅ Pesan eskalasi berhasil dikirim ke ${targetLevel}`);
   } catch (error) {
-    console.error(
-      `❌ Gagal mengirim pesan eskalasi ke ${targetLevel}:`,
-      error.message
-    );
+    console.error(`❌ Gagal mengirim pesan eskalasi ke ${targetLevel}:`, error.message);
   }
+
 }
 
 // ✅ Fungsi jika admin/atasan membalas
@@ -299,21 +318,34 @@ function handleAcknowledgement(from) {
 }
 
 async function regenerateSession() {
-  console.log(
-    "⚠️ Sesi terlogout. Menghapus session lama dan menyiapkan QR baru..."
-  );
+  console.log("⚠️ Sesi terlogout. Menghapus session lama dan menyiapkan QR baru...");
+
   const sessionPath = path.join(__dirname, "Session_baileys");
 
   try {
+    // Tunggu 2 detik untuk memastikan koneksi WhatsApp benar-benar terputus
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
     if (fs.existsSync(sessionPath)) {
+      // Gunakan fs.rmSync agar bersih, tapi pastikan tidak crash jika sedang dipakai
       fs.rmSync(sessionPath, { recursive: true, force: true });
-      console.log("🧹 Folder Session_baileys telah dihapus.");
+      console.log("🧹 Folder Session_baileys berhasil dihapus.");
+    } else {
+      console.log("ℹ️ Folder Session_baileys tidak ditemukan, lanjut membuat sesi baru.");
     }
+
+    // Tambah jeda sebelum reconnect (hindari spam login)
+    console.log("⏳ Menunggu 5 detik sebelum membuat QR baru...");
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    console.log("🔄 Membuat sesi baru dan menampilkan QR Code baru...");
+    await connectToWhatsApp();
   } catch (err) {
-    console.log("❌ Gagal menghapus folder session:", err.message);
+    console.error("❌ Gagal regenerasi sesi:", err.message);
+    console.log("🕒 Akan mencoba ulang dalam 10 detik...");
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+    await connectToWhatsApp();
   }
-  console.log("🔄 Membuat sesi baru dan menampilkan QR Code baru...");
-  await connectToWhatsApp();
 }
 
 async function connectToWhatsApp() {
@@ -324,34 +356,44 @@ async function connectToWhatsApp() {
     logger: pino({ level: "silent" }), // nonaktifkan log awal
     browser: ["CCTV Monitoring BOT","Windows", "Fajar"],
   });
+  
+sock.ev.on("connection.update", async (update) => {
+  const { connection, lastDisconnect, qr } = update;
 
-  sock.ev.on("connection.update", (update) => {
-    const { connection, lastDisconnect, qr } = update;
-    if (qr) {
-      console.log("Pindai QR code ini:");
-      qrcode.generate(qr, { small: true });
+  if (qr) {
+    console.log("📱 Pindai QR code ini untuk login:");
+    qrcode.generate(qr, { small: true });
+  }
+
+  if (connection === "close") {
+    const shouldReconnect =
+      lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+
+    if (shouldReconnect) {
+      console.log("🔁 Koneksi terputus, mencoba menyambungkan kembali...");
+      connectToWhatsApp();
+    } else {
+      console.log("🚫 Logout terdeteksi. QR baru akan dibuat...");
+      regenerateSession();
     }
-    if (connection === "close") {
-      const shouldReconnect =
-        lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      if (shouldReconnect) {
-        console.log("Koneksi terputus, menyambungkan kembali...");
-        connectToWhatsApp();
-      } else {
-        console.log("🚫 Logout terdeteksi. QR baru akan dibuat...");
-        regenerateSession();
-      }
-    } else if (connection === "open") {
-      console.log("Berhasil terhubung ke WhatsApp!");
-      console.log(
-        "Penjadwalan aktif.Bot akan mengecek CCTV setiap 10 menit dan mengirim laporan setiap 1 jam"
-      );
-      cekStatusMonitor();
-      setInterval(cekStatusMonitor, 10 * 60 * 1000);
-      setInterval(runEscalationChecks,60 * 60 * 1000);
-      // ------------------------
-    }
-  });
+
+  } else if (connection === "open") {
+    console.log("✅ Berhasil terhubung ke WhatsApp!");
+    console.log("⏳ Menunggu 10 menit sebelum memulai pemantauan pertama...");
+
+    // 🔸 Tunggu 10 menit (600.000 ms)
+    await new Promise(resolve => setTimeout(resolve, 10 * 60 * 1000));
+
+    console.log("🚀 Memulai pemantauan CCTV...");
+    console.log("Bot akan mengecek CCTV setiap 10 menit dan mengirim laporan setiap 1 jam");
+
+    // 🔹 Jalankan pengecekan dan eskalasi rutin
+    cekStatusMonitor();
+    setInterval(cekStatusMonitor, 10 * 60 * 1000);  // Cek tiap 10 menit
+    setInterval(runEscalationChecks, 60 * 60 * 1000); // Kirim laporan tiap 1 jam
+  }
+});
+
  
 
   //Fungsi Mengecek Balasan dari admin
