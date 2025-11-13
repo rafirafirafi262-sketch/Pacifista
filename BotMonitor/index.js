@@ -335,8 +335,8 @@ async function regenerateSession() {
     }
 
     // Tambah jeda sebelum reconnect (hindari spam login)
-    console.log("⏳ Menunggu 5 detik sebelum membuat QR baru...");
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    console.log("⏳ Menunggu 15 detik sebelum membuat QR baru...");
+    await new Promise((resolve) => setTimeout(resolve, 15000));
 
     console.log("🔄 Membuat sesi baru dan menampilkan QR Code baru...");
     await connectToWhatsApp();
