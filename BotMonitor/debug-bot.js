@@ -144,8 +144,8 @@ async function connectToWhatsApp() {
 }
 
 console.log("╔═════════════════════════════════════════════╗");
-console.log("║  CCTV BOT - CONNECTION STABILITY TEST      ║");
-console.log("║  (Testing connection ONLY, no messages)    ║");
+console.log("║  CCTV BOT - CONNECTION STABILITY TEST       ║");
+console.log("║  (Testing connection ONLY, no messages)     ║");
 console.log("╚═════════════════════════════════════════════╝\n");
 
 connectToWhatsApp();
