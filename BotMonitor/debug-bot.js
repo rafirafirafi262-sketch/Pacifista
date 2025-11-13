@@ -1,7 +1,4 @@
-cd /var/www/Pacifista/BotMonitor
 
-# Buat file debug-bot.js
-cat > debug-bot.js << 'EOF'
 const makeWASocket = require("@whiskeysockets/baileys").default;
 const {
   DisconnectReason,
@@ -145,6 +142,3 @@ console.log("╚═════════════════════�
 
 connectToWhatsApp();
 EOF
-
-# Jalankan
-node debug-bot.js
