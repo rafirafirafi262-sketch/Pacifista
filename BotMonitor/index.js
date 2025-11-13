@@ -2,6 +2,7 @@ const makeWASocket = require("@whiskeysockets/baileys").default;
 const {
   DisconnectReason,
   useMultiFileAuthState,
+  fetchLatestBaileysVersion,
 } = require("@whiskeysockets/baileys");
 const qrcode = require("qrcode-terminal");
 const puppeteer = require("puppeteer-core");
@@ -25,11 +26,14 @@ const ANTI_SPAM_CONFIG = {
 let monitoringStarted = false;
 let escalationStarted = false;
 let firstRun = true;
-let lastReportTime = 0; // Untuk batch report setiap 1 jam
+let lastReportTime = 0;
 
 const CHROME_PATH = "/usr/bin/chromium";
 const KUMA_BASE_URL = "http://172.16.100.10";
 let sock;
+let isConnecting = false; // PENTING: Flag untuk prevent double connection
+let monitoringInterval = null;
+let escalationInterval = null;
 
 // STATE VARIABLES
 const monitorDownCount = {};
@@ -106,7 +110,7 @@ async function cekStatusMonitor() {
 
   try {
     browser = await puppeteer.launch({
-      executablePath: "/usr/bin/chromium",
+      executablePath: CHROME_PATH,
       headless: "new",
       args: [
         "--no-sandbox",
@@ -184,36 +188,40 @@ async function cekStatusMonitor() {
 
     // Batch kirim pesan offline
     if (messageToSend.length > 0) {
-      const activeDownTimes = Object.values(monitorDownTime);
-      const earliestDownTimes =
-        activeDownTimes.length > 0
-          ? new Date(Math.min(...activeDownTimes)).toLocaleString("id-ID")
-          : "N/A";
-      const now = new Date().toLocaleString("id-ID");
+      const offlineMessages = messageToSend.filter(m => !m.includes("ONLINE"));
       
-      const title = `LAPORAN MONITORING SYSTEM\nDOWN SEJAK ${earliestDownTimes} (cek: ${now})\n\n*DAFTAR MONITOR DOWN:*\n`;
-      const bodyMessages = messageToSend.filter(m => !m.includes("ONLINE")).map(m => `• ${m}`).join("\n");
-      const finalMessages = title + bodyMessages;
-      
-      console.log(`\n📬 Mengirim pesan gabungan (${messageToSend.filter(m => !m.includes("ONLINE")).length} monitor)...`);
-      
-      if (await canSendMessage(HIERARCHY.admin)) {
-        await new Promise(r => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
-        await sock.sendMessage(HIERARCHY.admin, { text: finalMessages });
-        await recordMessageSent(HIERARCHY.admin);
-        console.log("✅ Pesan berhasil dikirim");
-      } else {
-        console.log("⛔ SKIP pengiriman - rate limit");
-      }
-    }
-
-    // Kirim pesan online jika ada
-    for (const msg of messageToSend) {
-      if (msg.includes("ONLINE")) {
+      if (offlineMessages.length > 0) {
+        const activeDownTimes = Object.values(monitorDownTime);
+        const earliestDownTimes =
+          activeDownTimes.length > 0
+            ? new Date(Math.min(...activeDownTimes)).toLocaleString("id-ID")
+            : "N/A";
+        const now = new Date().toLocaleString("id-ID");
+        
+        const title = `LAPORAN MONITORING SYSTEM\nDOWN SEJAK ${earliestDownTimes} (cek: ${now})\n\n*DAFTAR MONITOR DOWN:*\n`;
+        const bodyMessages = offlineMessages.map(m => `• ${m}`).join("\n");
+        const finalMessages = title + bodyMessages;
+        
+        console.log(`\n📬 Mengirim pesan gabungan (${offlineMessages.length} monitor)...`);
+        
         if (await canSendMessage(HIERARCHY.admin)) {
           await new Promise(r => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
-          await sock.sendMessage(HIERARCHY.admin, { text: msg });
+          await sock.sendMessage(HIERARCHY.admin, { text: finalMessages });
           await recordMessageSent(HIERARCHY.admin);
+          console.log("✅ Pesan berhasil dikirim");
+        } else {
+          console.log("⛔ SKIP pengiriman - rate limit");
+        }
+      }
+
+      // Kirim pesan online jika ada
+      for (const msg of messageToSend) {
+        if (msg.includes("ONLINE")) {
+          if (await canSendMessage(HIERARCHY.admin)) {
+            await new Promise(r => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
+            await sock.sendMessage(HIERARCHY.admin, { text: msg });
+            await recordMessageSent(HIERARCHY.admin);
+          }
         }
       }
     }
@@ -222,7 +230,13 @@ async function cekStatusMonitor() {
     console.error("❌ Gagal memantau status:", err.message);
   } finally {
     console.log("✅ Pemeriksaan selesai. Menutup browser..");
-    if (browser) await browser.close();
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (e) {
+        console.warn("⚠️ Error saat menutup browser:", e.message);
+      }
+    }
     isChecking = false;
   }
 }
@@ -386,89 +400,206 @@ async function regenerateSession() {
 
 // Main connection handler
 async function connectToWhatsApp() {
-  const { state, saveCreds } = await useMultiFileAuthState("Session_baileys");
-  sock = makeWASocket({
-    auth: state,
-    logger: pino({ level: "silent" }),
-    browser: ["CCTV Monitoring","Windows", "Fajar"],
-  });
-  
-  sock.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect, qr } = update;
+  // PREVENT DOUBLE CONNECTION
+  if (isConnecting) {
+    console.log("⚠️ Connection sudah berjalan, skip...");
+    return;
+  }
 
-    if (qr) {
-      console.log("📱 Pindai QR code ini untuk login:");
-      qrcode.generate(qr, { small: true });
+  isConnecting = true;
+  console.log("\n🔄 Memulai koneksi ke WhatsApp...");
+  console.log(`⏰ ${new Date().toLocaleString()}\n`);
+
+  try {
+    // Cleanup socket lama jika ada
+    if (sock) {
+      console.log("🧹 Cleaning up old socket...");
+      try {
+        sock.ev.removeAllListeners();
+        sock.ws?.close();
+        sock = null;
+      } catch (e) {
+        console.warn("⚠️ Error saat cleanup:", e.message);
+      }
     }
 
-    if (connection === "close") {
-      const shouldReconnect =
-        lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+    const { state, saveCreds } = await useMultiFileAuthState("Session_baileys");
+    const { version } = await fetchLatestBaileysVersion();
+    
+    console.log(`📂 Session loaded (Baileys v${version.join('.')})`);
 
-      if (shouldReconnect) {
-        console.log("🔁 Koneksi terputus, reconnect dalam 10 detik...");
-        await new Promise((resolve) => setTimeout(resolve, 10000));
-        connectToWhatsApp();
-      } else {
-        console.log("🚫 Logout terdeteksi.");
-        regenerateSession();
+    sock = makeWASocket({
+      auth: state,
+      logger: pino({ level: "silent" }),
+      browser: ["CCTV Monitoring", "Chrome", "1.0.0"],
+      defaultQueryTimeoutMs: 60000,
+      connectTimeoutMs: 60000,
+      keepAliveIntervalMs: 30000,
+      printQRInTerminal: false,
+    });
+    
+    sock.ev.on("connection.update", async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        console.log("📱 Pindai QR code ini untuk login:");
+        qrcode.generate(qr, { small: true });
       }
 
-    } else if (connection === "open") {
-      console.log("✅ Berhasil terhubung ke WhatsApp!");
-
-      if (!monitoringStarted) {
-        console.log("⏳ Menunggu 10 menit sebelum monitoring pertama...");
-        await new Promise((resolve) => setTimeout(resolve, 10 * 60 * 1000));
-
-        console.log("🚀 Memulai pemantauan CCTV...");
-        console.log("Cek setiap 10 menit, escalate setiap 1 jam");
-
-        monitoringStarted = true;
-        cekStatusMonitor();
-        setInterval(cekStatusMonitor, 10 * 60 * 1000);
+      if (connection === "connecting") {
+        console.log("🔄 Status: CONNECTING...");
       }
 
-      if (!escalationStarted) {
-        escalationStarted = true;
-        setInterval(runEscalationChecks, 60 * 60 * 1000);
-      }
+      if (connection === "close") {
+        console.log("🔴 CONNECTION CLOSED");
+        isConnecting = false; // Reset flag
 
-      console.log("✅ Monitoring dan escalation aktif.");
-    }
-  });
-
-  sock.ev.on("messages.upsert", async ({ messages }) => {
-    const msg = messages[0];
-    if (!msg.message || !msg.key.remoteJid) return;
-
-    const from = msg.key.remoteJid;
-    const textMsg = (
-      msg.message.conversation ||
-      msg.message.extendedTextMessage?.text ||
-      ""
-    )
-      .toLowerCase()
-      .trim();
-
-    if (from === HIERARCHY.admin || from === HIERARCHY.atasan) {
-      if (textMsg.startsWith("ok")) {
-        console.log(`✅ Konfirmasi diterima dari ${from}`);
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const errorMsg = lastDisconnect?.error?.message || "Unknown";
         
-        if (await canSendMessage(from)) {
-          await new Promise(r => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
-          await sock.sendMessage(from, {
-            text: "✅ Konfirmasi diterima. Eskalasi dihentikan.",
-          });
-          await recordMessageSent(from);
+        console.log(`   Status Code: ${statusCode}`);
+        console.log(`   Error: ${errorMsg}\n`);
+
+        // Handle specific disconnect reasons
+        if (statusCode === DisconnectReason.badSession) {
+          console.log("❌ BAD SESSION - Regenerating...");
+          regenerateSession();
+          return;
         }
-        
-        handleAcknowledgement(from);
-      }
-    }
-  });
 
-  sock.ev.on("creds.update", saveCreds);
+        if (statusCode === DisconnectReason.connectionReplaced) {
+          console.log("❌ CONNECTION REPLACED - Device lain login");
+          process.exit(1);
+        }
+
+        if (statusCode === DisconnectReason.loggedOut) {
+          console.log("🚫 LOGGED OUT - Regenerating session...");
+          regenerateSession();
+          return;
+        }
+
+        // Reconnect untuk error lainnya
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+        if (shouldReconnect) {
+          console.log("🔁 Reconnecting dalam 10 detik...");
+          await new Promise((resolve) => setTimeout(resolve, 10000));
+          connectToWhatsApp();
+        }
+
+      } else if (connection === "open") {
+        console.log("✅ Berhasil terhubung ke WhatsApp!");
+        isConnecting = false; // Reset flag
+
+        // Setup monitoring (hanya sekali)
+        if (!monitoringStarted) {
+          console.log("⏳ Menunggu 10 menit sebelum monitoring pertama...");
+          await new Promise((resolve) => setTimeout(resolve, 10 * 60 * 1000));
+
+          console.log("🚀 Memulai pemantauan CCTV...");
+          console.log("Cek setiap 10 menit, escalate setiap 1 jam");
+
+          monitoringStarted = true;
+          
+          // Jalankan sekali langsung
+          cekStatusMonitor();
+          
+          // Setup interval monitoring
+          if (monitoringInterval) clearInterval(monitoringInterval);
+          monitoringInterval = setInterval(cekStatusMonitor, 10 * 60 * 1000);
+        }
+
+        // Setup escalation (hanya sekali)
+        if (!escalationStarted) {
+          escalationStarted = true;
+          
+          if (escalationInterval) clearInterval(escalationInterval);
+          escalationInterval = setInterval(runEscalationChecks, 60 * 60 * 1000);
+        }
+
+        console.log("✅ Monitoring dan escalation aktif.");
+      }
+    });
+
+    sock.ev.on("messages.upsert", async ({ messages }) => {
+      const msg = messages[0];
+      if (!msg.message || !msg.key.remoteJid) return;
+
+      const from = msg.key.remoteJid;
+      const textMsg = (
+        msg.message.conversation ||
+        msg.message.extendedTextMessage?.text ||
+        ""
+      )
+        .toLowerCase()
+        .trim();
+
+      if (from === HIERARCHY.admin || from === HIERARCHY.atasan) {
+        if (textMsg.startsWith("ok")) {
+          console.log(`✅ Konfirmasi diterima dari ${from}`);
+          
+          if (await canSendMessage(from)) {
+            await new Promise(r => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
+            await sock.sendMessage(from, {
+              text: "✅ Konfirmasi diterima. Eskalasi dihentikan.",
+            });
+            await recordMessageSent(from);
+          }
+          
+          handleAcknowledgement(from);
+        }
+      }
+    });
+
+    sock.ev.on("creds.update", saveCreds);
+
+  } catch (err) {
+    console.error("❌ ERROR saat koneksi:", err.message);
+    isConnecting = false;
+    
+    console.log("🔁 Retry dalam 10 detik...");
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+    connectToWhatsApp();
+  }
 }
+
+// Graceful shutdown
+process.on("SIGINT", () => {
+  console.log("\n\n🛑 Shutting down gracefully...");
+  
+  if (monitoringInterval) {
+    clearInterval(monitoringInterval);
+    console.log("✅ Monitoring interval cleared");
+  }
+  
+  if (escalationInterval) {
+    clearInterval(escalationInterval);
+    console.log("✅ Escalation interval cleared");
+  }
+  
+  if (sock) {
+    sock.ev.removeAllListeners();
+    sock.ws?.close();
+    console.log("✅ Socket closed");
+  }
+  
+  console.log("✅ Cleanup completed\n");
+  process.exit(0);
+});
+
+// Handle uncaught errors
+process.on("uncaughtException", (err) => {
+  console.error("❌ UNCAUGHT EXCEPTION:", err.message);
+  console.log("Stack:", err.stack);
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("❌ UNHANDLED REJECTION:", err);
+});
+
+console.log("╔═══════════════════════════════════════════════╗");
+console.log("║     BOT MONITORING CCTV - PRODUCTION          ║");
+console.log("║  Cek: 10 menit | Eskalasi: 1 jam              ║");
+console.log("╚═══════════════════════════════════════════════╝\n");
 
 connectToWhatsApp();
