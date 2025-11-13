@@ -169,8 +169,9 @@ async function cekStatusMonitor() {
     console.log("✅ Pemeriksaan selesai. Menutup browser..");
     if (browser) await browser.close();
      isChecking = false;
+    }
   }
-}
+
  let isEscalating = false;
 
 // Ganti fungsi lama dengan ini
