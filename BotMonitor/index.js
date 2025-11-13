@@ -134,12 +134,20 @@ async function cekStatusMonitor() {
 
     for (const pageInfo of STATUS_PAGES) {
       const url = `${KUMA_BASE_URL}/status/${pageInfo.slug}`;
-      const page = await browser.newPage();
-      await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
-      await page.waitForSelector(".item-name");
-      await page.waitForSelector(".badge.bg-primary, .badge.bg-danger");
-      const html = await page.content();
-      await page.close();
+      let page = null;
+      try {
+        page = await browser.newPage();
+        await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
+        await page.waitForSelector(".item-name", { timeout: 10000 });
+        await page.waitForSelector(".badge.bg-primary, .badge.bg-danger", { timeout: 10000 });
+        const html = await page.content();
+        await page.close();
+        page = null;
+      } catch (pageErr) {
+        console.warn(`⚠️ Error di halaman ${pageInfo.slug}:`, pageErr.message);
+        if (page) await page.close();
+        continue;
+      }
 
       const $ = cheerio.load(html);
       const monitors = [];
