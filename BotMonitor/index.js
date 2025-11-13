@@ -97,17 +97,17 @@ async function cekStatusMonitor() {
     // =========================================
 // ✅ Pengecekan status CCTV & pengiriman notifikasi
 // =========================================
-for (const key of Object.keys(statusMonitor)) {
-  const isDown = statusMonitor[key] === "DOWN";
+// for (const key of Object.keys(statusMonitor)) {
+  // const isDown = statusMonitor[key] === "DOWN";
 
-  if (isDown) {
-    // Tambah hitungan down time
-    monitorDownCount[key] = (monitorDownCount[key] || 0) + 1;
+  // if (isDown) {
+  //   // Tambah hitungan down time
+  //   monitorDownCount[key] = (monitorDownCount[key] || 0) + 1;
 
-    // Simpan waktu pertama kali down
-    if (!monitorDownTime[key]) {
-      monitorDownTime[key] = Date.now();
-    }
+  //   // Simpan waktu pertama kali down
+  //   if (!monitorDownTime[key]) {
+  //     monitorDownTime[key] = Date.now();
+  //   // }
 
     // ✅ Kirim notifikasi hanya sekali per jam (setiap 6x loop 10 menit)
     // contoh: 10 menit * 6 = 60 menit
@@ -369,32 +369,40 @@ sock.ev.on("connection.update", async (update) => {
     const shouldReconnect =
       lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
 
-    if (shouldReconnect) {
-      console.log("🔁 Koneksi terputus, mencoba menyambungkan kembali...");
-      connectToWhatsApp();
-    } else {
+      if (shouldReconnect) {
+    console.log("🔁 Koneksi terputus, mencoba menyambungkan kembali dalam 10 detik...");
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+    connectToWhatsApp();
+  }
+    else {
       console.log("🚫 Logout terdeteksi. QR baru akan dibuat...");
       regenerateSession();
     }
 
   } else if (connection === "open") {
-    console.log("✅ Berhasil terhubung ke WhatsApp!");
-    console.log("⏳ Menunggu 10 menit sebelum memulai pemantauan pertama...");
+  console.log("✅ Berhasil terhubung ke WhatsApp!");
+  console.log("⏳ Menunggu 10 menit sebelum memulai pemantauan pertama...");
 
-    // 🔸 Tunggu 10 menit (600.000 ms)
-    await new Promise(resolve => setTimeout(resolve, 10 * 60 * 1000));
+  // 🔸 Tunggu 10 menit (600.000 ms) sebelum menjalankan pemantauan pertama
+  await new Promise((resolve) => setTimeout(resolve, 10 * 60 * 1000));
 
-    console.log("🚀 Memulai pemantauan CCTV...");
-    console.log("Bot akan mengecek CCTV setiap 10 menit dan mengirim laporan setiap 1 jam");
+  console.log("🚀 Memulai pemantauan CCTV...");
+  console.log("Bot akan mengecek CCTV setiap 10 menit dan mengirim laporan setiap 1 jam");
 
-    // 🔹 Jalankan pengecekan dan eskalasi rutin
+  // Gunakan flag supaya interval tidak dobel ketika reconnect
+  if (!global.monitoringStarted) {
+    global.monitoringStarted = true;
     cekStatusMonitor();
-    setInterval(cekStatusMonitor, 10 * 60 * 1000);  // Cek tiap 10 menit
-    setInterval(runEscalationChecks, 60 * 60 * 1000); // Kirim laporan tiap 1 jam
+    setInterval(cekStatusMonitor, 10 * 60 * 1000); // ✅ Cek setiap 10 menit
   }
-});
 
- 
+  if (!global.escalationStarted) {
+    global.escalationStarted = true;
+    setInterval(runEscalationChecks, 60 * 60 * 1000); // ✅ Kirim laporan setiap 1 jam
+  }
+
+  console.log("✅ Interval pemantauan dan eskalasi aktif.");
+}
 
   //Fungsi Mengecek Balasan dari admin
   sock.ev.on("messages.upsert", async ({ messages }) => {
