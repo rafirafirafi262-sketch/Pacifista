@@ -141,4 +141,3 @@ console.log("║   Starting connection...                   ║");
 console.log("╚════════════════════════════════════════════╝");
 
 connectToWhatsApp();
-EOF
