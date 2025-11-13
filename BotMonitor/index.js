@@ -149,6 +149,7 @@ async function cekStatusMonitor() {
       );
       await sock.sendMessage(HIERARCHY.admin, { text: finalMessages });
     }
+  }
   } catch (err) {
     console.error("❌ Gagal memantau status:", err.message);
   } finally {
@@ -160,7 +161,6 @@ async function cekStatusMonitor() {
 
  let isEscalating = false;
 
-// Ganti fungsi lama dengan ini
 async function runEscalationChecks() {
   if (isEscalating) {
     console.log("⏳ Proses eskalasi sebelumnya belum selesai, skip...");
