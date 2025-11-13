@@ -129,7 +129,7 @@ async function cekStatusMonitor() {
       delete monitorDownTime[key];
     }
   }
-}
+
 
   //let lastReportTime = 0;
     
@@ -150,7 +150,7 @@ async function cekStatusMonitor() {
       await sock.sendMessage(HIERARCHY.admin, { text: finalMessages });
     }
   }
-  } catch (err) {
+   catch (err) {
     console.error("❌ Gagal memantau status:", err.message);
   } finally {
     console.log("✅ Pemeriksaan selesai. Menutup browser..");
