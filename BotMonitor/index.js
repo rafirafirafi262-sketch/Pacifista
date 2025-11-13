@@ -39,7 +39,9 @@ const HIERARCHY = {
   atasan: "6282283595329@s.whatsapp.net",
   pimpinan: "628995897629@s.whatsapp.net",
 };
+
 let isChecking = false;
+
 async function cekStatusMonitor() {
   if (isChecking) {
     console.log("⏳ Pengecekan sebelumnya belum selesai, skip...");
@@ -94,45 +96,48 @@ async function cekStatusMonitor() {
         if (currentStatus === "offline") {
           monitorDownCount[key]++;
 
+          // ✅ Set waktu down hanya sekali
+          if (!monitorDownTime[key]) {
+            monitorDownTime[key] = new Date();
+          }
 
-    // ✅ Kirim notifikasi hanya sekali per jam (setiap 6x loop 10 menit)
-    // contoh: 10 menit * 6 = 60 menit
-    if (monitorDownCount[key] === 1 || monitorDownCount[key] % 6 === 0) {
-      const now = new Date().toLocaleString("id-ID");
-      const message = `🔴 *${key}* terdeteksi OFFLINE sejak ${new Date(
-        monitorDownTime[key]
-      ).toLocaleString("id-ID")} (cek: ${now})`;
-      console.log("📤 Kirim notifikasi DOWN:", message);
-      messageToSend.push(message);
+          // ✅ Kirim notifikasi hanya sekali per jam (setiap 6x loop 10 menit)
+          // contoh: 10 menit * 6 = 60 menit
+          if (monitorDownCount[key] === 1 || monitorDownCount[key] % 6 === 0) {
+            const now = new Date().toLocaleString("id-ID");
+            const message = `🔴 *${key}* terdeteksi OFFLINE sejak ${new Date(
+              monitorDownTime[key]
+            ).toLocaleString("id-ID")} (cek: ${now})`;
+            console.log("📤 Kirim notifikasi DOWN:", message);
+            messageToSend.push(message);
 
-      sentOffline[key] = true;
+            sentOffline[key] = true;
 
-      // ✅ Tambahkan ke escalation queue hanya sekali
-      if (!escalationQueue[key]) {
-        escalationQueue[key] = { level: "admin", lastSent: Date.now() };
-      } else {
-        escalationQueue[key].lastSent = Date.now(); // update waktu terakhir kirim
+            // ✅ Tambahkan ke escalation queue hanya sekali
+            if (!escalationQueue[key]) {
+              escalationQueue[key] = { level: "admin", lastSent: Date.now() };
+            } else {
+              escalationQueue[key].lastSent = Date.now(); // update waktu terakhir kirim
+            }
+          }
+        } else {
+          // ✅ Jika kembali ONLINE
+          if (sentOffline[key]) {
+            const now = new Date().toLocaleString("id-ID");
+            const message = `🟢 *${key}* telah kembali ONLINE pada ${now}`;
+            console.log("📤 Kirim notifikasi ONLINE:", message);
+            messageToSend.push(message);
+
+            // Reset semua state terkait monitor ini
+            delete sentOffline[key];
+            delete escalationQueue[key];
+            delete monitorDownCount[key];
+            delete monitorDownTime[key];
+          }
+        }
       }
     }
-  } else {
-    // ✅ Jika kembali ONLINE
-    if (sentOffline[key]) {
-      const now = new Date().toLocaleString("id-ID");
-      const message = `🟢 *${key}* telah kembali ONLINE pada ${now}`;
-      console.log("📤 Kirim notifikasi ONLINE:", message);
-      messageToSend.push(message);
 
-      // Reset semua state terkait monitor ini
-      delete sentOffline[key];
-      delete escalationQueue[key];
-      delete monitorDownCount[key];
-      delete monitorDownTime[key];
-    }
-  }
-
-
-  //let lastReportTime = 0;
-    
     // ✅ Kirim pesan gabungan jika ada
     if (messageToSend.length > 0) {
       const activeDownTimes = Object.values(monitorDownTime);
@@ -149,17 +154,16 @@ async function cekStatusMonitor() {
       );
       await sock.sendMessage(HIERARCHY.admin, { text: finalMessages });
     }
-  }
-   catch (err) {
+  } catch (err) {
     console.error("❌ Gagal memantau status:", err.message);
   } finally {
     console.log("✅ Pemeriksaan selesai. Menutup browser..");
     if (browser) await browser.close();
-     isChecking = false;
+    isChecking = false;
   }
+}
 
-
- let isEscalating = false;
+let isEscalating = false;
 
 async function runEscalationChecks() {
   if (isEscalating) {
@@ -213,9 +217,6 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
   let title;
   let nextLevel;
   let waitTime;
-
-  // Catatan: Pastikan variabel global monitorDownCount dan monitorDownTime
-  // telah dideklarasikan di scope yang sama atau global.
 
   // Konfigurasi pesan berdasarkan level target
   if (targetLevel === "atasan") {
@@ -285,7 +286,6 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
   } catch (error) {
     console.error(`❌ Gagal mengirim pesan eskalasi ke ${targetLevel}:`, error.message);
   }
-
 }
 
 // ✅ Fungsi jika admin/atasan membalas
@@ -344,52 +344,52 @@ async function connectToWhatsApp() {
     browser: ["CCTV Monitoring","Windows", "Fajar"],
   });
   
-sock.ev.on("connection.update", async (update) => {
-  const { connection, lastDisconnect, qr } = update;
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, lastDisconnect, qr } = update;
 
-  if (qr) {
-    console.log("📱 Pindai QR code ini untuk login:");
-    qrcode.generate(qr, { small: true });
-  }
-
-  if (connection === "close") {
-    const shouldReconnect =
-      lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
-
-      if (shouldReconnect) {
-    console.log("🔁 Koneksi terputus, mencoba menyambungkan kembali dalam 10 detik...");
-    await new Promise((resolve) => setTimeout(resolve, 10000));
-    connectToWhatsApp();
-  }
-    else {
-      console.log("🚫 Logout terdeteksi. QR baru akan dibuat...");
-      regenerateSession();
+    if (qr) {
+      console.log("📱 Pindai QR code ini untuk login:");
+      qrcode.generate(qr, { small: true });
     }
 
-  } else if (connection === "open") {
-  console.log("✅ Berhasil terhubung ke WhatsApp!");
-  console.log("⏳ Menunggu 10 menit sebelum memulai pemantauan pertama...");
+    if (connection === "close") {
+      const shouldReconnect =
+        lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
 
-  // 🔸 Tunggu 10 menit (600.000 ms) sebelum menjalankan pemantauan pertama
-  await new Promise((resolve) => setTimeout(resolve, 10 * 60 * 1000));
+      if (shouldReconnect) {
+        console.log("🔁 Koneksi terputus, mencoba menyambungkan kembali dalam 10 detik...");
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+        connectToWhatsApp();
+      } else {
+        console.log("🚫 Logout terdeteksi. QR baru akan dibuat...");
+        regenerateSession();
+      }
 
-  console.log("🚀 Memulai pemantauan CCTV...");
-  console.log("Bot akan mengecek CCTV setiap 10 menit dan mengirim laporan setiap 1 jam");
+    } else if (connection === "open") {
+      console.log("✅ Berhasil terhubung ke WhatsApp!");
+      console.log("⏳ Menunggu 10 menit sebelum memulai pemantauan pertama...");
 
-  // Gunakan flag supaya interval tidak dobel ketika reconnect
-  if (!global.monitoringStarted) {
-    global.monitoringStarted = true;
-    cekStatusMonitor();
-    setInterval(cekStatusMonitor, 10 * 60 * 1000); // ✅ Cek setiap 10 menit
-  }
+      // 🔸 Tunggu 10 menit (600.000 ms) sebelum menjalankan pemantauan pertama
+      await new Promise((resolve) => setTimeout(resolve, 10 * 60 * 1000));
 
-  if (!global.escalationStarted) {
-    global.escalationStarted = true;
-    setInterval(runEscalationChecks, 60 * 60 * 1000); // ✅ Kirim laporan setiap 1 jam
-  }
+      console.log("🚀 Memulai pemantauan CCTV...");
+      console.log("Bot akan mengecek CCTV setiap 10 menit dan mengirim laporan setiap 1 jam");
 
-  console.log("✅ Interval pemantauan dan eskalasi aktif.");
-}
+      // Gunakan flag supaya interval tidak dobel ketika reconnect
+      if (!global.monitoringStarted) {
+        global.monitoringStarted = true;
+        cekStatusMonitor();
+        setInterval(cekStatusMonitor, 10 * 60 * 1000); // ✅ Cek setiap 10 menit
+      }
+
+      if (!global.escalationStarted) {
+        global.escalationStarted = true;
+        setInterval(runEscalationChecks, 60 * 60 * 1000); // ✅ Kirim laporan setiap 1 jam
+      }
+
+      console.log("✅ Interval pemantauan dan eskalasi aktif.");
+    }
+  });
 
   //Fungsi Mengecek Balasan dari admin
   sock.ev.on("messages.upsert", async ({ messages }) => {
@@ -402,7 +402,6 @@ sock.ev.on("connection.update", async (update) => {
       msg.message.extendedTextMessage?.text ||
       ""
     )
-
       .toLowerCase()
       .trim();
 
