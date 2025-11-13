@@ -25,6 +25,7 @@ const ANTI_SPAM_CONFIG = {
 let monitoringStarted = false;
 let escalationStarted = false;
 let firstRun = true;
+let lastReportTime = 0; // Untuk batch report setiap 1 jam
 
 const CHROME_PATH = "/usr/bin/chromium";
 const KUMA_BASE_URL = "http://172.16.100.10";
