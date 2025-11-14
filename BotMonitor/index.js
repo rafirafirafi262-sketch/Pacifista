@@ -513,7 +513,7 @@ async function connectToWhatsApp() {
           if (escalationInterval) {
             clearInterval(escalationInterval);
           }
-          escalationInterval = setInterval(runEscalationChecks, 60 * 1000);
+          escalationInterval = setInterval(runEscalationChecks, 60 * 60 * 1000);
         }
 
         console.log("✅ Monitoring dan escalation aktif.");
