@@ -18,7 +18,7 @@ const STATUS_PAGES = [
 
 const ANTI_SPAM_CONFIG = {
   MIN_DELAY_BETWEEN_MESSAGES: 3000,
-  MAX_MESSAGES_PER_HOUR: 20,
+  MAX_MESSAGES_PER_HOUR: 10,
   BATCH_SEND_DELAY: 2000,
   COOLDOWN_BETWEEN_BATCHES: 5000,
 };
@@ -263,8 +263,8 @@ async function runEscalationChecks() {
     const shouldEscalateToAtasan = [];
     const shouldEscalateToPimpinan = [];
 
-    const ATASAN_WAIT_MS = 20 * 60 * 1000;
-    const PIMPINAN_WAIT_MS = 40 * 60 * 1000;
+    const ATASAN_WAIT_MS = 60 * 60 * 1000;
+    const PIMPINAN_WAIT_MS = 2 * 60 * 60 * 1000;
 
     for (const [key, esc] of Object.entries(escalationQueue)) {
       const elapsed = now - esc.lastSent;
@@ -304,12 +304,12 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
   if (targetLevel === "atasan") {
     targetHierarchy = HIERARCHY.atasan;
     nextLevel = "atasan";
-    waitTime = "20 menit";
+    waitTime = "1 Jam";
     title = `⚠️ ESKALASI LEVEL 1: KE ATASAN (${keysToEscalate.length} Monitor)`;
   } else {
     targetHierarchy = HIERARCHY.pimpinan;
     nextLevel = "pimpinan";
-    waitTime = "40 menit";
+    waitTime = "2 Jam";
     title = `🚨 ESKALASI LEVEL 2: KE PIMPINAN (${keysToEscalate.length} Monitor)`;
   }
 
@@ -349,7 +349,7 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
     if (await canSendMessage(targetHierarchy)) {
       await new Promise(r => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
       await sock.sendMessage(targetHierarchy, { text: finalMessage });
-      await recordMessageSent(targetHierarchy);
+      await recordMessageSent(targetHierarchy); 
       console.log(`✅ Pesan eskalasi dikirim ke ${targetLevel}`);
     } else {
       console.log(`⛔ SKIP eskalasi - rate limit`);
@@ -513,7 +513,7 @@ async function connectToWhatsApp() {
           if (escalationInterval) {
             clearInterval(escalationInterval);
           }
-          escalationInterval = setInterval(runEscalationChecks, 60 * 60 * 1000);
+          escalationInterval = setInterval(runEscalationChecks, 60 * 1000);
         }
 
         console.log("✅ Monitoring dan escalation aktif.");
