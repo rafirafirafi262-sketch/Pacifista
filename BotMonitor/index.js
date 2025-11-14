@@ -12,9 +12,7 @@ const path = require("path");
 const pino = require("pino");
 
 // KONFIGURASI
-const STATUS_PAGES = [
-  { name: "CCTV Publik", slug: "bot-cctvpublic" },
-];
+const STATUS_PAGES = [{ name: "CCTV Publik", slug: "bot-cctvpublic" }];
 
 const ANTI_SPAM_CONFIG = {
   MIN_DELAY_BETWEEN_MESSAGES: 3000,
@@ -54,12 +52,13 @@ let isChecking = false;
 
 async function canSendMessage(contact) {
   const now = Date.now();
-  
+
   if (lastMessageTime[contact]) {
     const timeSinceLastMsg = now - lastMessageTime[contact];
     if (timeSinceLastMsg < ANTI_SPAM_CONFIG.MIN_DELAY_BETWEEN_MESSAGES) {
-      const waitTime = ANTI_SPAM_CONFIG.MIN_DELAY_BETWEEN_MESSAGES - timeSinceLastMsg;
-      await new Promise(r => setTimeout(r, waitTime));
+      const waitTime =
+        ANTI_SPAM_CONFIG.MIN_DELAY_BETWEEN_MESSAGES - timeSinceLastMsg;
+      await new Promise((r) => setTimeout(r, waitTime));
     }
   }
 
@@ -68,14 +67,16 @@ async function canSendMessage(contact) {
   }
 
   const hourData = messageCountPerHour[contact];
-  
+
   if (now >= hourData.resetTime) {
     hourData.count = 0;
     hourData.resetTime = now + 3600000;
   }
 
   if (hourData.count >= ANTI_SPAM_CONFIG.MAX_MESSAGES_PER_HOUR) {
-    console.log(`⛔ Sudah mencapai limit ${ANTI_SPAM_CONFIG.MAX_MESSAGES_PER_HOUR} pesan/jam`);
+    console.log(
+      `⛔ Sudah mencapai limit ${ANTI_SPAM_CONFIG.MAX_MESSAGES_PER_HOUR} pesan/jam`
+    );
     return false;
   }
 
@@ -84,13 +85,18 @@ async function canSendMessage(contact) {
 
 async function recordMessageSent(contact) {
   lastMessageTime[contact] = Date.now();
-  
+
   if (!messageCountPerHour[contact]) {
-    messageCountPerHour[contact] = { count: 0, resetTime: Date.now() + 3600000 };
+    messageCountPerHour[contact] = {
+      count: 0,
+      resetTime: Date.now() + 3600000,
+    };
   }
   messageCountPerHour[contact].count++;
-  
-  console.log(`📊 Pesan: ${messageCountPerHour[contact].count}/${ANTI_SPAM_CONFIG.MAX_MESSAGES_PER_HOUR}`);
+
+  console.log(
+    `📊 Pesan: ${messageCountPerHour[contact].count}/${ANTI_SPAM_CONFIG.MAX_MESSAGES_PER_HOUR}`
+  );
 }
 
 async function cekStatusMonitor() {
@@ -98,7 +104,7 @@ async function cekStatusMonitor() {
     console.log("⏳ Pengecekan sebelumnya belum selesai, skip...");
     return;
   }
-  
+
   isChecking = true;
   console.log("🔍 Mengecek status monitor...", new Date().toLocaleTimeString());
 
@@ -120,19 +126,21 @@ async function cekStatusMonitor() {
     for (const pageInfo of STATUS_PAGES) {
       const url = `${KUMA_BASE_URL}/status/${pageInfo.slug}`;
       let page = null;
-      
+
       try {
         page = await browser.newPage();
         await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
         await page.waitForSelector(".item-name", { timeout: 10000 });
-        await page.waitForSelector(".badge.bg-primary, .badge.bg-danger", { timeout: 10000 });
+        await page.waitForSelector(".badge.bg-primary, .badge.bg-danger", {
+          timeout: 10000,
+        });
         const html = await page.content();
         await page.close();
         page = null;
 
         const $ = cheerio.load(html);
         const monitors = [];
-        
+
         $(".monitor-list .item").each((_, el) => {
           const name = $(el).find(".item-name").text().trim();
           const isOffline = $(el).find(".badge.bg-danger").length > 0;
@@ -145,7 +153,7 @@ async function cekStatusMonitor() {
           const key = `${pageInfo.name} - ${monitor.name}`;
           const currentStatus = monitor.isOffline ? "offline" : "online";
           lastStatuses[key] = currentStatus;
-          
+
           if (!monitorDownCount[key]) {
             monitorDownCount[key] = 0;
           }
@@ -168,16 +176,41 @@ async function cekStatusMonitor() {
               }
             }
           } else {
-            if (sentOffline[key]) {
-              const now = new Date().toLocaleString("id-ID");
-              const message = `🟢 *${key}* telah kembali ONLINE pada ${now}`;
-              console.log("📤 Kirim notifikasi ONLINE:", message);
-              messageToSend.push(message);
+            // Kumpulkan semua monitor yang kembali ONLINE
+            const onlineMonitors = [];
 
-              delete sentOffline[key];
-              delete escalationQueue[key];
-              delete monitorDownCount[key];
-              delete monitorDownTime[key];
+            for (const key in sentOffline) {
+              if (sentOffline[key]) {
+                onlineMonitors.push(key);
+
+                // Hapus dari tracking
+                delete sentOffline[key];
+                delete escalationQueue[key];
+                delete monitorDownCount[key];
+                delete monitorDownTime[key];
+              }
+            }
+
+            // Jika ada monitor yang kembali ONLINE, kirim satu pesan gabungan
+            if (onlineMonitors.length > 0) {
+              const now = new Date().toLocaleString("id-ID", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              });
+
+              let message = `LAPORAN MONITORING SYSTEM\n🟢 ONLINE KEMBALI SEJAK ${now}\n\n`;
+              message += `DAFTAR MONITOR ONLINE:\n`;
+
+              onlineMonitors.forEach((monitor) => {
+                message += `• ${monitor}\n`;
+              });
+
+              console.log("📤 Kirim notifikasi ONLINE gabungan:", message);
+              messageToSend.push(message);
             }
           }
         }
@@ -195,23 +228,30 @@ async function cekStatusMonitor() {
     }
 
     if (messageToSend.length > 0) {
-      const offlineMessages = messageToSend.filter(m => !m.includes("ONLINE"));
-      
+      const offlineMessages = messageToSend.filter(
+        (m) => !m.includes("ONLINE")
+      );
+
       if (offlineMessages.length > 0) {
         const activeDownTimes = Object.values(monitorDownTime);
-        const earliestDownTimes = activeDownTimes.length > 0
-          ? new Date(Math.min(...activeDownTimes)).toLocaleString("id-ID")
-          : "N/A";
+        const earliestDownTimes =
+          activeDownTimes.length > 0
+            ? new Date(Math.min(...activeDownTimes)).toLocaleString("id-ID")
+            : "N/A";
         const now = new Date().toLocaleString("id-ID");
-        
+
         const title = `LAPORAN MONITORING SYSTEM\n🛑 DOWN SEJAK ${earliestDownTimes}\n\n*DAFTAR MONITOR DOWN:*\n`;
-        const bodyMessages = offlineMessages.map(m => `• ${m}`).join("\n");
+        const bodyMessages = offlineMessages.map((m) => `• ${m}`).join("\n");
         const finalMessages = title + bodyMessages;
-        
-        console.log(`\n📬 Mengirim pesan gabungan (${offlineMessages.length} monitor)...`);
-        
+
+        console.log(
+          `\n📬 Mengirim pesan gabungan (${offlineMessages.length} monitor)...`
+        );
+
         if (await canSendMessage(HIERARCHY.admin)) {
-          await new Promise(r => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
+          await new Promise((r) =>
+            setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+          );
           await sock.sendMessage(HIERARCHY.admin, { text: finalMessages });
           await recordMessageSent(HIERARCHY.admin);
           console.log("✅ Pesan berhasil dikirim");
@@ -223,14 +263,15 @@ async function cekStatusMonitor() {
       for (const msg of messageToSend) {
         if (msg.includes("ONLINE")) {
           if (await canSendMessage(HIERARCHY.admin)) {
-            await new Promise(r => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
+            await new Promise((r) =>
+              setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+            );
             await sock.sendMessage(HIERARCHY.admin, { text: msg });
             await recordMessageSent(HIERARCHY.admin);
           }
         }
       }
     }
-
   } catch (err) {
     console.error("❌ Gagal memantau status:", err.message);
     console.error("Stack trace:", err.stack);
@@ -278,13 +319,14 @@ async function runEscalationChecks() {
 
     if (shouldEscalateToAtasan.length > 0) {
       await sendBatchEscalation("atasan", shouldEscalateToAtasan);
-      await new Promise(r => setTimeout(r, ANTI_SPAM_CONFIG.COOLDOWN_BETWEEN_BATCHES));
+      await new Promise((r) =>
+        setTimeout(r, ANTI_SPAM_CONFIG.COOLDOWN_BETWEEN_BATCHES)
+      );
     }
 
     if (shouldEscalateToPimpinan.length > 0) {
       await sendBatchEscalation("pimpinan", shouldEscalateToPimpinan);
     }
-
   } catch (err) {
     console.error("❌ Error saat eskalasi:", err.message);
   } finally {
@@ -343,13 +385,17 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
     `*DAFTAR MONITOR:*\n` +
     body.join("\n");
 
-  console.log(`\n📤 Mengirim eskalasi ke ${targetLevel}: ${keysToEscalate.length} item.`);
+  console.log(
+    `\n📤 Mengirim eskalasi ke ${targetLevel}: ${keysToEscalate.length} item.`
+  );
 
   try {
     if (await canSendMessage(targetHierarchy)) {
-      await new Promise(r => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
+      await new Promise((r) =>
+        setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+      );
       await sock.sendMessage(targetHierarchy, { text: finalMessage });
-      await recordMessageSent(targetHierarchy); 
+      await recordMessageSent(targetHierarchy);
       console.log(`✅ Pesan eskalasi dikirim ke ${targetLevel}`);
     } else {
       console.log(`⛔ SKIP eskalasi - rate limit`);
@@ -426,8 +472,8 @@ async function connectToWhatsApp() {
 
     const { state, saveCreds } = await useMultiFileAuthState("Session_baileys");
     const { version } = await fetchLatestBaileysVersion();
-    
-    console.log(`📂 Session loaded (Baileys v${version.join('.')})`);
+
+    console.log(`📂 Session loaded (Baileys v${version.join(".")})`);
 
     sock = makeWASocket({
       auth: state,
@@ -438,7 +484,7 @@ async function connectToWhatsApp() {
       keepAliveIntervalMs: 30000,
       printQRInTerminal: false,
     });
-    
+
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
@@ -457,7 +503,7 @@ async function connectToWhatsApp() {
 
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const errorMsg = lastDisconnect?.error?.message || "Unknown";
-        
+
         console.log(`   Status Code: ${statusCode}`);
         console.log(`   Error: ${errorMsg}\n`);
 
@@ -485,7 +531,6 @@ async function connectToWhatsApp() {
           await new Promise((resolve) => setTimeout(resolve, 10000));
           connectToWhatsApp();
         }
-
       } else if (connection === "open") {
         console.log("✅ Berhasil terhubung ke WhatsApp!");
         isConnecting = false;
@@ -498,9 +543,9 @@ async function connectToWhatsApp() {
           console.log("Cek setiap 10 menit, escalate setiap 1 jam");
 
           monitoringStarted = true;
-          
+
           cekStatusMonitor();
-          
+
           if (monitoringInterval) {
             clearInterval(monitoringInterval);
           }
@@ -509,7 +554,7 @@ async function connectToWhatsApp() {
 
         if (!escalationStarted) {
           escalationStarted = true;
-          
+
           if (escalationInterval) {
             clearInterval(escalationInterval);
           }
@@ -536,27 +581,28 @@ async function connectToWhatsApp() {
       if (from === HIERARCHY.admin || from === HIERARCHY.atasan) {
         if (textMsg.startsWith("ok")) {
           console.log(`✅ Konfirmasi diterima dari ${from}`);
-          
+
           if (await canSendMessage(from)) {
-            await new Promise(r => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
+            await new Promise((r) =>
+              setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+            );
             await sock.sendMessage(from, {
               text: "✅ Konfirmasi diterima. Eskalasi dihentikan.",
             });
             await recordMessageSent(from);
           }
-          
+
           handleAcknowledgement(from);
         }
       }
     });
 
     sock.ev.on("creds.update", saveCreds);
-
   } catch (err) {
     console.error("❌ ERROR saat koneksi:", err.message);
     console.error("Stack trace:", err.stack);
     isConnecting = false;
-    
+
     console.log("🔁 Retry dalam 10 detik...");
     await new Promise((resolve) => setTimeout(resolve, 10000));
     connectToWhatsApp();
@@ -565,17 +611,17 @@ async function connectToWhatsApp() {
 
 process.on("SIGINT", () => {
   console.log("\n\n🛑 Shutting down gracefully...");
-  
+
   if (monitoringInterval) {
     clearInterval(monitoringInterval);
     console.log("✅ Monitoring interval cleared");
   }
-  
+
   if (escalationInterval) {
     clearInterval(escalationInterval);
     console.log("✅ Escalation interval cleared");
   }
-  
+
   if (sock) {
     sock.ev.removeAllListeners();
     if (sock.ws) {
@@ -583,7 +629,7 @@ process.on("SIGINT", () => {
     }
     console.log("✅ Socket closed");
   }
-  
+
   console.log("✅ Cleanup completed\n");
   process.exit(0);
 });
