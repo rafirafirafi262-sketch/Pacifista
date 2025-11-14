@@ -319,7 +319,7 @@ async function runEscalationChecks() {
   }
 
   isEscalating = true;
-  console.log("🚀 Menjalankan pengecekan eskalasi...");
+  console.log("🚀 Menjalankan pengecekan eskalasi...", new Date().toLocaleTimeString());
 
   try {
     const now = Date.now();
