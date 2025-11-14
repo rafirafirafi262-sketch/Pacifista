@@ -176,11 +176,33 @@ async function cekStatusMonitor() {
               }
             }
           } else {
-            // Kumpulkan semua monitor yang kembali ONLINE
+            // ===== CONTOH STRUKTUR LENGKAP =====
+
+            // 1. Loop utama untuk cek monitoring (JANGAN taruh kode gabungan di sini)
+            monitors.forEach((monitor) => {
+              const key = monitor.name;
+              const isOnline = monitor.status === "up";
+
+              if (!isOnline) {
+                // Handle offline...
+                if (!sentOffline[key]) {
+                  sentOffline[key] = true;
+                  // dst...
+                }
+              } else {
+                // Monitor ONLINE - HANYA tandai untuk dikumpulkan
+                // JANGAN kirim pesan di sini!
+              }
+            });
+
+            // 2. SETELAH loop selesai, baru kumpulkan yang kembali online
             const onlineMonitors = [];
 
             for (const key in sentOffline) {
-              if (sentOffline[key]) {
+              // Cek apakah monitor ini sekarang sudah online
+              const monitor = monitors.find((m) => m.name === key);
+
+              if (monitor && monitor.status === "up") {
                 onlineMonitors.push(key);
 
                 // Hapus dari tracking
@@ -191,7 +213,7 @@ async function cekStatusMonitor() {
               }
             }
 
-            // Jika ada monitor yang kembali ONLINE, kirim satu pesan gabungan
+            // 3. Kirim SATU pesan gabungan jika ada yang online
             if (onlineMonitors.length > 0) {
               const now = new Date().toLocaleString("id-ID", {
                 day: "2-digit",
