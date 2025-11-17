@@ -917,8 +917,6 @@ async function connectToWhatsApp() {
 
           monitoringStarted = true;
 
-          cekStatusMonitor();
-
           if (monitoringInterval) {
             clearInterval(monitoringInterval);
           }
