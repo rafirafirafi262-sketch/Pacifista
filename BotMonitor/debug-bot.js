@@ -179,22 +179,6 @@ function getMaintenanceTimeLeft(monitorKey) {
   return timeLeft > 0 ? timeLeft : 0;
 }
 
-// ===== FUNGSI CUSTOM MAINTENANCE DURATION =====
-function parseMaintenanceDuration(input) {
-  // Parse format: "2h", "30m", "1d", dll
-  const match = input.match(/^(\d+)([hmd])$/i);
-  if (!match) return null;
-  
-  const value = parseInt(match[1]);
-  const unit = match[2].toLowerCase();
-  
-  let ms = 0;
-  if (unit === 'h') ms = value * 60 * 60 * 1000;
-  else if (unit === 'm') ms = value * 60 * 1000;
-  else if (unit === 'd') ms = value * 24 * 60 * 60 * 1000;
-  
-  return ms;
-}
 
 // ===== FUNGSI HELP =====
 async function sendHelpMessage(from) {
@@ -1173,7 +1157,7 @@ process.on("unhandledRejection", (err) => {
 console.log("╔════════════════════════════════════════════════════════╗");
 console.log("║                 BOT MONITORING CCTV                    ║");
 console.log("║     Cek: 10 menit | Eskalasi: 1 jam | Weekly Report    ║");
-console.log("║   Fitur: Help, Stats, Force-Check, Custom Maintenance  ║");
+console.log("║           Fitur: Help, Stats, Force-Check              ║");
 console.log("╚════════════════════════════════════════════════════════╝\n");
 
 connectToWhatsApp();
