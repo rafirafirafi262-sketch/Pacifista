@@ -1171,9 +1171,9 @@ process.on("unhandledRejection", (err) => {
 });
 
 console.log("╔════════════════════════════════════════════════════════╗");
-console.log("║       BOT MONITORING CCTV - PRODUCTION (ENHANCED)      ║");
-console.log("║  Cek: 10 menit | Eskalasi: 1 jam | Weekly Report      ║");
-console.log("║  Fitur: Help, Stats, Force-Check, Custom Maintenance  ║");
+console.log("║                 BOT MONITORING CCTV                    ║");
+console.log("║     Cek: 10 menit | Eskalasi: 1 jam | Weekly Report    ║");
+console.log("║   Fitur: Help, Stats, Force-Check, Custom Maintenance  ║");
 console.log("╚════════════════════════════════════════════════════════╝\n");
 
 connectToWhatsApp();
