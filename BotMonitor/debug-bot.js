@@ -493,7 +493,7 @@ async function cekStatusMonitor() {
 
       try {
         page = await browser.newPage();
-        await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
+        await page.goto(url, { waitUntil: "networkidle0", timeout: 60000 });
         await page.waitForSelector(".item-name", { timeout: 10000 });
         await page.waitForSelector(".badge.bg-primary, .badge.bg-danger", { timeout: 10000 });
         const html = await page.content();
