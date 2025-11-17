@@ -952,7 +952,7 @@ async function connectToWhatsApp() {
         .toLowerCase()
         .trim();
 
-      if (from === HIERARCHY.admin || from === HIERARCHY.atasan) {
+      if (from === HIERARCHY.admin || from === HIERARCHY.atasan || from === HIERARCHY.pimpinan) {
         // ===== COMMAND: HELP =====
         if (textMsg === "help") {
           console.log(`❓ Help diminta dari ${from}`);
