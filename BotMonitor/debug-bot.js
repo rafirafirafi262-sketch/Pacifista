@@ -199,13 +199,13 @@ async function sendHelpMessage(from) {
   helpMsg += `   Lihat statistik uptime & downtime hari ini\n`;
   helpMsg += `   Contoh: \`stats\`\n\n`;
   
-  helpMsg += `4. *stats weekly*\n`;
+  helpMsg += `4. *weekly*\n`;
   helpMsg += `   Lihat statistik uptime & downtime 7 hari terakhir\n`;
-  helpMsg += `   Contoh: \`stats weekly\`\n\n`;
+  helpMsg += `   Contoh: \`weekly\`\n\n`;
   
-  helpMsg += `5. *force-check*\n`;
-  helpMsg += `   Cek status monitor sekarang (jangan tunggu 10 menit)\n`;
-  helpMsg += `   Contoh: \`force-check\`\n\n`;
+  helpMsg += `5. *check*\n`;
+  helpMsg += `   Cek status monitor sekarang \n`;
+  helpMsg += `   Contoh: \`check\`\n\n`;
   
   
   helpMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -288,15 +288,37 @@ async function forceCheckMonitors(from) {
   // Jalankan pengecekan
   await cekStatusMonitor();
   
-  // Kirim hasil
-  let resultMsg = `✅ Pengecekan selesai!\n\n`;
-  resultMsg += `*Status Monitor Terkini:*\n`;
+    // Kirim hasil
+    // Hitung online/offline
+  let onlineCount = 0;
+  let offlineCount = 0;
+  let offlineMonitors = [];
   
   for (const [key, status] of Object.entries(lastStatuses)) {
-    const icon = status === 'online' ? '🟢' : '🔴';
-    resultMsg += `${icon} ${key}: ${status.toUpperCase()}\n`;
+    if (status === 'online') {
+      onlineCount++;
+    } else {
+      offlineCount++;
+      offlineMonitors.push(key);
+    }
   }
   
+  const totalMonitors = onlineCount + offlineCount;
+  
+  // Kirim hasil
+  let resultMsg = `✅ *Pengecekan selesai!*\n\n`;
+  resultMsg += `*Status Keseluruhan:*\n`;
+  resultMsg += `🟢 Online: ${onlineCount}/${totalMonitors}\n`;
+  resultMsg += `🔴 Offline: ${offlineCount}/${totalMonitors}\n\n`;
+  
+  if (offlineCount > 0) {
+    resultMsg += `*Monitor yang Offline:*\n`;
+    offlineMonitors.forEach((monitor) => {
+      resultMsg += `🔴 ${monitor}\n`;
+    });
+  } else {
+    resultMsg += `✅ Semua monitor dalam kondisi online!\n`;
+  }
   if (await canSendMessage(from)) {
     await new Promise((r) => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
     await sock.sendMessage(from, { text: resultMsg });
@@ -945,13 +967,13 @@ async function connectToWhatsApp() {
           await sendStatsMessage(from, false);
         }
 
-        if (textMsg === "stats weekly") {
+        if (textMsg === "weekly") {
           console.log(`📊 Weekly stats diminta dari ${from}`);
           await sendStatsMessage(from, true);
         }
 
         // ===== COMMAND: FORCE-CHECK =====
-        if (textMsg === "force-check") {
+        if (textMsg === "check") {
           console.log(`🔄 Force-check diminta dari ${from}`);
           await forceCheckMonitors(from);
         }
