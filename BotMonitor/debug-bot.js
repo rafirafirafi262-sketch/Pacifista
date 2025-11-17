@@ -252,7 +252,7 @@ async function cekStatusMonitor() {
           message += `DAFTAR MONITOR ONLINE:\n`;
 
           onlineMonitors.forEach((monitor) => {
-            message += `• ${monitor}\n`;
+            message += `🔴 ${monitor}\n`;
           });
 
           console.log("📤 Kirim notifikasi ONLINE gabungan:", message);
@@ -398,12 +398,12 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
     targetHierarchy = HIERARCHY.atasan;
     nextLevel = "atasan";
     waitTime = "1 Jam";
-    title = `⚠️ ESKALASI LEVEL 1: KE ATASAN (${keysToEscalate.length} Monitor)`;
+    title = `⚠️ ESKALASI LEVEL 1: ATASAN (${keysToEscalate.length} Monitor)`;
   } else {
     targetHierarchy = HIERARCHY.pimpinan;
     nextLevel = "pimpinan";
     waitTime = "2 Jam";
-    title = `🚨 ESKALASI LEVEL 2: KE PIMPINAN (${keysToEscalate.length} Monitor)`;
+    title = `🚨 ESKALASI LEVEL 2: PIMPINAN (${keysToEscalate.length} Monitor)`;
   }
 
   let body = [];
