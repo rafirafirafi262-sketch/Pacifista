@@ -12,7 +12,10 @@ const path = require("path");
 const pino = require("pino");
 
 // KONFIGURASI
-const STATUS_PAGES = [{ name: "CCTV Publik", slug: "bot-cctvpublic" }];
+const STATUS_PAGES = [
+  { name: "CCTV Publik", slug: "bot-cctvpublic" },
+  {name: "hotel", slug: "bot-hotel"},
+];
 
 const ANTI_SPAM_CONFIG = {
   MIN_DELAY_BETWEEN_MESSAGES: 3000,
