@@ -207,14 +207,6 @@ async function sendHelpMessage(from) {
   helpMsg += `   Cek status monitor sekarang (jangan tunggu 10 menit)\n`;
   helpMsg += `   Contoh: \`force-check\`\n\n`;
   
-  helpMsg += `6. *maintenance <duration>*\n`;
-  helpMsg += `   Set custom duration maintenance untuk monitor terbaru yang down\n`;
-  helpMsg += `   Format: \`maintenance 2h\` | \`maintenance 30m\` | \`maintenance 1d\`\n`;
-  helpMsg += `   Contoh: \`maintenance 2h\`\n\n`;
-  
-  helpMsg += `7. *help*\n`;
-  helpMsg += `   Tampilkan panduan ini\n`;
-  helpMsg += `   Contoh: \`help\`\n\n`;
   
   helpMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   helpMsg += `_Perintah case-insensitive (ok, OK, Ok semua berlaku)_`;
