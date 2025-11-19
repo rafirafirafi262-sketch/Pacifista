@@ -1158,52 +1158,6 @@ async function connectToWhatsApp() {
 
         // ===== COMMAND: MAINTENANCE <DURATION> =====
         if (textMsg.startsWith("maintenance ")) {
-          if (
-            textMsg.startsWith("set admin") ||
-            textMsg.startsWith("set atasan") ||
-            textMsg.startsWith("set pimpinan")
-          ) {
-            if (from !== HIERARCHY.admin) {
-              const notAllowedMsg = `❌ Hanya admin yang bisa mengubah nomor hierarki.`;
-              if (await canSendMessage(from)) {
-                await sock.sendMessage(from, { text: notAllowedMsg });
-                await recordMessageSent(from);
-              }
-              return;
-            }
-
-            const parts = textMsg.split(" ");
-            if (parts.length !== 3) {
-              const usageMsg = `❌ Format salah. Gunakan:\nset admin 6285xxx\nset atasan 6281xxx\nset pimpinan 6289xxx`;
-              if (await canSendMessage(from)) {
-                await sock.sendMessage(from, { text: usageMsg });
-                await recordMessageSent(from);
-              }
-              return;
-            }
-
-            const role = parts[1]; // admin, atasan, pimpinan
-            const rawNumber = parts[2];
-            const formattedNumber = formatPhoneNumber(rawNumber);
-
-            if (!["admin", "atasan", "pimpinan"].includes(role)) {
-              const invalidRoleMsg = `❌ Role tidak valid. Gunakan: admin, atasan, atau pimpinan.`;
-              if (await canSendMessage(from)) {
-                await sock.sendMessage(from, { text: invalidRoleMsg });
-                await recordMessageSent(from);
-              }
-              return;
-            }
-
-            HIERARCHY[role] = formattedNumber;
-            saveHierarchy(HIERARCHY);
-
-            const successMsg = `✅ Nomor ${role} berhasil diubah menjadi: ${formattedNumber}`;
-            if (await canSendMessage(from)) {
-              await sock.sendMessage(from, { text: successMsg });
-              await recordMessageSent(from);
-            }
-          }
           const args = textMsg.split(" ");
           if (args.length === 2) {
             const durationStr = args[1];
@@ -1268,6 +1222,52 @@ async function connectToWhatsApp() {
           }
         }
         // ===== COMMAND: SET ADMIN / ATASAN / PIMPINAN =====
+        if (
+          textMsg.startsWith("set admin") ||
+          textMsg.startsWith("set atasan") ||
+          textMsg.startsWith("set pimpinan")
+        ) {
+          if (from !== HIERARCHY.admin) {
+            const notAllowedMsg = `❌ Hanya admin yang bisa mengubah nomor hierarki.`;
+            if (await canSendMessage(from)) {
+              await sock.sendMessage(from, { text: notAllowedMsg });
+              await recordMessageSent(from);
+            }
+            return;
+          }
+
+          const parts = textMsg.split(" ");
+          if (parts.length !== 3) {
+            const usageMsg = `❌ Format salah. Gunakan:\nset admin 6285xxx\nset atasan 6281xxx\nset pimpinan 6289xxx`;
+            if (await canSendMessage(from)) {
+              await sock.sendMessage(from, { text: usageMsg });
+              await recordMessageSent(from);
+            }
+            return;
+          }
+
+          const role = parts[1]; // admin, atasan, pimpinan
+          const rawNumber = parts[2];
+          const formattedNumber = formatPhoneNumber(rawNumber);
+
+          if (!["admin", "atasan", "pimpinan"].includes(role)) {
+            const invalidRoleMsg = `❌ Role tidak valid. Gunakan: admin, atasan, atau pimpinan.`;
+            if (await canSendMessage(from)) {
+              await sock.sendMessage(from, { text: invalidRoleMsg });
+              await recordMessageSent(from);
+            }
+            return;
+          }
+
+          HIERARCHY[role] = formattedNumber;
+          saveHierarchy(HIERARCHY);
+
+          const successMsg = `✅ Nomor ${role} berhasil diubah menjadi: ${formattedNumber}`;
+          if (await canSendMessage(from)) {
+            await sock.sendMessage(from, { text: successMsg });
+            await recordMessageSent(from);
+          }
+        }
       }
     });
 
