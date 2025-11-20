@@ -12,7 +12,6 @@ const path = require("path");
 const pino = require("pino");
 
 const HIERARCHY_FILE = path.join(__dirname, "hierarchy.json");
-
 function loadHierarchy() {
   if (fs.existsSync(HIERARCHY_FILE)) {
     const data = fs.readFileSync(HIERARCHY_FILE, "utf-8");
