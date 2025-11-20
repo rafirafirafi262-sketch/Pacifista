@@ -244,17 +244,9 @@ async function sendHelpMessage(from) {
   helpMsg += `   Contoh: \`check\`\n\n`;
 
   helpMsg += `\n*PERINTAH ADMIN:*\n\n`;
-  helpMsg += `6. *set admin <nomor>*\n`;
+  helpMsg += `6. *set admin/atasan/pimpinan <nomor>*\n`;
   helpMsg += `   Ubah nomor admin (hanya admin saat ini)\n`;
   helpMsg += `   Contoh: \`set admin 628xxxxxxxxxx\`\n\n`;
-
-  helpMsg += `7. *set atasan <nomor>*\n`;
-  helpMsg += `   Ubah nomor atasan (hanya admin)\n`;
-  helpMsg += `   Contoh: \`set atasan 628xxxxxxxxxx\`\n\n`;
-
-  helpMsg += `8. *set pimpinan <nomor>*\n`;
-  helpMsg += `   Ubah nomor pimpinan (hanya admin)\n`;
-  helpMsg += `   Contoh: \`set pimpinan 628xxxxxxxxxx\`\n\n`;
 
   helpMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   helpMsg += `_Perintah case-insensitive (ok, OK, Ok semua berlaku)_`;
@@ -686,7 +678,7 @@ async function cekStatusMonitor() {
             : "N/A";
 
         const title = `LAPORAN MONITORING SYSTEM\n🛑 DOWN SEJAK ${earliestDownTimes}\n\n*DAFTAR MONITOR DOWN:*\n`;
-        const bodyMessages = offlineMessages.map((m) => `• ${m}`).join("\n");
+        const bodyMessages = offlineMessages.map((m) => `🛑 ${m}`).join("\n");
         const finalMessages = title + bodyMessages;
 
         console.log(
