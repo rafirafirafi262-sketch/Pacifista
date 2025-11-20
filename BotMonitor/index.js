@@ -50,7 +50,7 @@ const ANTI_SPAM_CONFIG = {
 
 let monitoringStarted = false;
 let escalationStarted = false;
-let firstRun = true;
+// let firstRun = true;
 let lastReportTime = 0;
 
 const CHROME_PATH = "/usr/bin/chromium";
@@ -60,6 +60,7 @@ let isConnecting = false;
 let monitoringInterval = null;
 let escalationInterval = null;
 let weeklyReportInterval = null;
+const monitorSessionStart = {}; // Track kapan monitor pertama kali terdeteksi online
 
 // STATE VARIABLES
 const monitorDownCount = {};
@@ -110,6 +111,11 @@ function recordMonitorEvent(monitorKey, status, duration = null) {
 
   monitorHistory[monitorKey].push(event);
 
+  // Track first online session
+  if (status === "online" && !monitorSessionStart[monitorKey]) {
+    monitorSessionStart[monitorKey] = Date.now();
+  }
+
   // Simpan hanya 7 hari terakhir
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   monitorHistory[monitorKey] = monitorHistory[monitorKey].filter(
@@ -128,29 +134,29 @@ function getTodayStats(monitorKey) {
     (e) => e.timestamp >= todayStart
   );
 
-  // SESUDAH: Hitung durasi akumulatif
-  let totalDowntime = 0;
-  for (const event of events) {
-    if (event.status === "offline" && event.duration) {
-      totalDowntime += event.duration;
-    }
-  }
-  // Tambahan: Jika monitor masih offline, hitung downtime yang berlangsung
-  if (sentOffline[key]) {
-    totalDowntime += (Date.now() - monitorDownTime[key].getTime());
-  }
+  const downEvents = events.filter((e) => e.status === "offline");
 
+  // FIXED: Hitung durasi akumulatif dengan benar
+  let totalDowntime = 0;
   downEvents.forEach((e) => {
     if (e.duration) totalDowntime += e.duration;
   });
+
+  // FIXED: Gunakan monitorKey bukan 'key'
+  if (sentOffline[monitorKey] && monitorDownTime[monitorKey]) {
+    totalDowntime += (Date.now() - monitorDownTime[monitorKey].getTime());
+  }
+
+  // Check if monitor ever went online
+  const hasBeenOnline = monitorSessionStart[monitorKey] !== undefined;
 
   return {
     downCount: downEvents.length,
     totalDowntime: totalDowntime,
     events: events.length,
+    hasBeenOnline: hasBeenOnline,
   };
 }
-
 function getWeeklyStats(monitorKey) {
   initializeMonitorHistory(monitorKey);
 
@@ -166,8 +172,18 @@ function getWeeklyStats(monitorKey) {
     if (e.duration) totalDowntime += e.duration;
   });
 
+  // FIXED: Add current downtime if still offline
+  if (sentOffline[monitorKey] && monitorDownTime[monitorKey]) {
+    totalDowntime += (Date.now() - monitorDownTime[monitorKey].getTime());
+  }
+
   const uptime = 7 * 24 * 60 * 60 * 1000 - totalDowntime;
-  const uptimePercent = ((uptime / (7 * 24 * 60 * 60 * 1000)) * 100).toFixed(2);
+  const hasBeenOnline = monitorSessionStart[monitorKey] !== undefined;
+  
+  // FIXED: Jika monitor tidak pernah online, uptime = 0
+  const uptimePercent = hasBeenOnline 
+    ? ((uptime / (7 * 24 * 60 * 60 * 1000)) * 100).toFixed(2)
+    : "0.00";
 
   return {
     downCount: downEvents.length,
@@ -175,9 +191,11 @@ function getWeeklyStats(monitorKey) {
     uptime: uptime,
     uptimePercent: uptimePercent,
     events: events.length,
+    hasBeenOnline: hasBeenOnline,
   };
 }
 
+// ===== FUNGSI PARSE MONITOR KEY =====
 const parseMonitorKey = (key) => {
   const parts = key.split(" - ");
   return {
@@ -238,6 +256,20 @@ function getMaintenanceTimeLeft(monitorKey) {
 
   return timeLeft > 0 ? timeLeft : 0;
 }
+function parseMaintenanceDuration(durationStr) {
+  const match = durationStr.match(/^(\d+)(h|m|d)$/i);
+  if (!match) return null;
+
+  const value = parseInt(match[1]);
+  const unit = match[2].toLowerCase();
+
+  switch (unit) {
+    case 'h': return value * 60 * 60 * 1000;
+    case 'm': return value * 60 * 1000;
+    case 'd': return value * 24 * 60 * 60 * 1000;
+    default: return null;
+  }
+}
 
 // ===== FUNGSI HELP =====
 async function sendHelpMessage(from) {
@@ -265,6 +297,10 @@ async function sendHelpMessage(from) {
   helpMsg += `5. *check*\n`;
   helpMsg += `   Cek status monitor sekarang \n`;
   helpMsg += `   Contoh: \`check\`\n\n`;
+  
+  helpMsg += `6. *maintenance <durasi>*\n`;  // ← TAMBAH BARU
+  helpMsg += `   Set durasi maintenance custom (contoh: 2h, 30m, 1d)\n`;
+  helpMsg += `   Contoh: \`maintenance 2h\`\n\n`;
 
   helpMsg += `\n*PERINTAH ADMIN:*\n\n`;
   helpMsg += `6. *set admin/atasan/pimpinan <nomor>*\n`;
@@ -281,63 +317,78 @@ async function sendHelpMessage(from) {
   }
 }
 
-// ===== FUNGSI STATS =====
 async function sendStatsMessage(from, isWeekly = false) {
   let statsMsg = `*📊 STATISTIK MONITORING ${
     isWeekly ? "(7 HARI)" : "(HARI INI)"
   }*\n`;
   statsMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-  let allStats = [];
-
-  // Hitung stats untuk semua monitor
+  // Group stats by category
+  const categoryGroups = {};
+  
   for (const key of Object.keys(lastStatuses)) {
+    const { category, name } = parseMonitorKey(key);
+    if (!categoryGroups[category]) {
+      categoryGroups[category] = [];
+    }
+    
     const stats = isWeekly ? getWeeklyStats(key) : getTodayStats(key);
-    allStats.push({
-      name: key,
+    categoryGroups[category].push({
+      name: name,
+      fullKey: key,
       ...stats,
     });
   }
 
-  if (allStats.length === 0) {
+  if (Object.keys(categoryGroups).length === 0) {
     statsMsg += `✅ Belum ada data monitoring.\n`;
   } else {
     let totalDowntime = 0;
     let totalDownCount = 0;
 
-    allStats.forEach((stat, idx) => {
-      totalDowntime += stat.totalDowntime;
-      totalDownCount += stat.downCount;
+    // Display per category
+    for (const [category, monitors] of Object.entries(categoryGroups)) {
+      statsMsg += `*━━━ ${category} ━━━*\n\n`;
+      
+      monitors.forEach((stat, idx) => {
+        totalDowntime += stat.totalDowntime;
+        totalDownCount += stat.downCount;
 
-      statsMsg += `*${idx + 1}. ${stat.name}*\n`;
-      statsMsg += `   Status: ${
-        lastStatuses[stat.name] === "online" ? "🟢 Online" : "🔴 Offline"
-      }\n`;
-      statsMsg += `   Down ${isWeekly ? "minggu ini" : "hari ini"}: ${
-        stat.downCount
-      }x\n`;
-      statsMsg += `   Total downtime: ${formatDuration(stat.totalDowntime)}\n`;
+        statsMsg += `*${idx + 1}. ${stat.name}*\n`;
+        statsMsg += `   Status: ${
+          lastStatuses[stat.fullKey] === "online" ? "🟢 Online" : "🔴 Offline"
+        }\n`;
+        statsMsg += `   Down ${isWeekly ? "minggu ini" : "hari ini"}: ${
+          stat.downCount
+        }x\n`;
+        statsMsg += `   Total downtime: ${formatDuration(stat.totalDowntime)}\n`;
 
-      if (isWeekly) {
-        statsMsg += `   Uptime: ${stat.uptimePercent}%\n`;
-      }
+        if (isWeekly) {
+          if (stat.hasBeenOnline) {
+            statsMsg += `   Uptime: ${stat.uptimePercent}%\n`;
+          } else {
+            statsMsg += `   Uptime: N/A (belum pernah online)\n`;
+          }
+        }
 
-      statsMsg += `\n`;
-    });
+        statsMsg += `\n`;
+      });
+    }
 
     statsMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     statsMsg += `*TOTAL ${isWeekly ? "MINGGU" : "HARI"}:*\n`;
     statsMsg += `Total down: ${totalDownCount}x\n`;
     statsMsg += `Total downtime: ${formatDuration(totalDowntime)}\n`;
 
-    if (isWeekly && allStats.length > 0) {
-      const totalUptime =
-        allStats.reduce((sum, s) => sum + s.uptime, 0) / allStats.length;
-      const avgUptime = (
-        (totalUptime / (7 * 24 * 60 * 60 * 1000)) *
-        100
-      ).toFixed(2);
-      statsMsg += `Rata-rata uptime: ${avgUptime}%\n`;
+    if (isWeekly) {
+      const allMonitors = Object.values(categoryGroups).flat();
+      const onlineMonitors = allMonitors.filter(m => m.hasBeenOnline);
+      
+      if (onlineMonitors.length > 0) {
+        const totalUptime = onlineMonitors.reduce((sum, s) => sum + s.uptime, 0) / onlineMonitors.length;
+        const avgUptime = ((totalUptime / (7 * 24 * 60 * 60 * 1000)) * 100).toFixed(2);
+        statsMsg += `Rata-rata uptime: ${avgUptime}%\n`;
+      }
     }
   }
 
@@ -347,8 +398,6 @@ async function sendStatsMessage(from, isWeekly = false) {
     await recordMessageSent(from);
   }
 }
-
-// ===== FUNGSI FORCE CHECK =====
 async function forceCheckMonitors(from) {
   let msg = `⏳ Sedang melakukan pengecekan status monitor...\n\n`;
 
@@ -361,45 +410,52 @@ async function forceCheckMonitors(from) {
   // Jalankan pengecekan
   await cekStatusMonitor();
 
-  // Kirim hasil
-  // Hitung online/offline
-  let onlineCount = 0;
-  let offlineCount = 0;
-  let offlineMonitors = [];
-
+  // Group by category
+  const categoryGroups = {};
+  
   for (const [key, status] of Object.entries(lastStatuses)) {
+    const { category, name } = parseMonitorKey(key);
+    if (!categoryGroups[category]) {
+      categoryGroups[category] = {
+        online: [],
+        offline: []
+      };
+    }
+    
     if (status === "online") {
-      onlineCount++;
+      categoryGroups[category].online.push(name);
     } else {
-      offlineCount++;
-      offlineMonitors.push(key);
+      categoryGroups[category].offline.push(name);
     }
   }
 
-  const totalMonitors = onlineCount + offlineCount;
-
-  // Kirim hasil
+  // Build result message
   let resultMsg = `✅ *Pengecekan selesai!*\n\n`;
-  resultMsg += `*Status Keseluruhan:*\n`;
-  resultMsg += `🟢 Online: ${onlineCount}/${totalMonitors}\n`;
-  resultMsg += `🔴 Offline: ${offlineCount}/${totalMonitors}\n\n`;
 
-  if (offlineCount > 0) {
-    resultMsg += `*Monitor yang Offline:*\n`;
-    offlineMonitors.forEach((monitor) => {
-      resultMsg += `🔴 ${monitor}\n`;
-    });
-  } else {
-    resultMsg += `✅ Semua monitor dalam kondisi online!\n`;
+  for (const [category, monitors] of Object.entries(categoryGroups)) {
+    const totalOnline = monitors.online.length;
+    const totalOffline = monitors.offline.length;
+    const total = totalOnline + totalOffline;
+
+    resultMsg += `*${category}:*\n`;
+    resultMsg += `🟢 Online: ${totalOnline}/${total}\n`;
+    resultMsg += `🔴 Offline: ${totalOffline}/${total}\n`;
+
+    if (totalOffline > 0) {
+      resultMsg += `\n_Monitor offline:_\n`;
+      monitors.offline.forEach((monitor) => {
+        resultMsg += `  • ${monitor}\n`;
+      });
+    }
+    resultMsg += `\n`;
   }
+
   if (await canSendMessage(from)) {
     await new Promise((r) => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
     await sock.sendMessage(from, { text: resultMsg });
     await recordMessageSent(from);
   }
 }
-
-// ===== FUNGSI WEEKLY REPORT =====
 async function sendWeeklyReport() {
   console.log("📅 Mengirim laporan mingguan...");
 
@@ -414,14 +470,21 @@ async function sendWeeklyReport() {
     "id-ID"
   )} - ${now.toLocaleDateString("id-ID")}\n\n`;
 
-  let allStats = [];
+  // Group by category
+  const categoryGroups = {};
   let totalDowntime = 0;
   let totalDownCount = 0;
 
   for (const key of Object.keys(lastStatuses)) {
+    const { category, name } = parseMonitorKey(key);
+    if (!categoryGroups[category]) {
+      categoryGroups[category] = [];
+    }
+    
     const stats = getWeeklyStats(key);
-    allStats.push({
-      name: key,
+    categoryGroups[category].push({
+      name: name,
+      fullKey: key,
       ...stats,
     });
 
@@ -429,35 +492,48 @@ async function sendWeeklyReport() {
     totalDownCount += stats.downCount;
   }
 
-  if (allStats.length === 0) {
+  if (Object.keys(categoryGroups).length === 0) {
     reportMsg += `✅ Tidak ada data monitoring minggu ini.\n`;
   } else {
-    reportMsg += `*DETAIL PER MONITOR:*\n`;
+    reportMsg += `*DETAIL PER KATEGORI:*\n`;
     reportMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    allStats.forEach((stat, idx) => {
-      reportMsg += `*${idx + 1}. ${stat.name}*\n`;
-      reportMsg += `   Status Sekarang: ${
-        lastStatuses[stat.name] === "online" ? "🟢 Online" : "🔴 Offline"
-      }\n`;
-      reportMsg += `   Frekuensi Down: ${stat.downCount}x\n`;
-      reportMsg += `   Total Downtime: ${formatDuration(stat.totalDowntime)}\n`;
-      reportMsg += `   Uptime: ${stat.uptimePercent}%\n`;
-      reportMsg += `\n`;
-    });
+    for (const [category, monitors] of Object.entries(categoryGroups)) {
+      reportMsg += `*【 ${category} 】*\n\n`;
+      
+      monitors.forEach((stat, idx) => {
+        reportMsg += `${idx + 1}. *${stat.name}*\n`;
+        reportMsg += `   Status: ${
+          lastStatuses[stat.fullKey] === "online" ? "🟢 Online" : "🔴 Offline"
+        }\n`;
+        reportMsg += `   Down: ${stat.downCount}x\n`;
+        reportMsg += `   Downtime: ${formatDuration(stat.totalDowntime)}\n`;
+        
+        if (stat.hasBeenOnline) {
+          reportMsg += `   Uptime: ${stat.uptimePercent}%\n`;
+        } else {
+          reportMsg += `   Uptime: N/A (belum pernah online)\n`;
+        }
+        reportMsg += `\n`;
+      });
+    }
 
     reportMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     reportMsg += `*RINGKASAN MINGGUAN:*\n`;
-    reportMsg += `Total Monitor: ${allStats.length}\n`;
+    
+    const totalMonitors = Object.values(categoryGroups).flat().length;
+    reportMsg += `Total Monitor: ${totalMonitors}\n`;
     reportMsg += `Total Down: ${totalDownCount}x\n`;
     reportMsg += `Total Downtime: ${formatDuration(totalDowntime)}\n`;
 
-    const totalUptime =
-      allStats.reduce((sum, s) => sum + s.uptime, 0) / allStats.length;
-    const avgUptime = ((totalUptime / (7 * 24 * 60 * 60 * 1000)) * 100).toFixed(
-      2
-    );
-    reportMsg += `Rata-rata Uptime: ${avgUptime}%\n`;
+    const allMonitors = Object.values(categoryGroups).flat();
+    const onlineMonitors = allMonitors.filter(m => m.hasBeenOnline);
+    
+    if (onlineMonitors.length > 0) {
+      const totalUptime = onlineMonitors.reduce((sum, s) => sum + s.uptime, 0) / onlineMonitors.length;
+      const avgUptime = ((totalUptime / (7 * 24 * 60 * 60 * 1000)) * 100).toFixed(2);
+      reportMsg += `Rata-rata Uptime: ${avgUptime}%\n`;
+    }
   }
 
   reportMsg += `\n_Laporan ini dikirim setiap hari Senin pukul 08:00_`;
@@ -1137,41 +1213,7 @@ async function connectToWhatsApp() {
           }
         }
 
-        // ===== COMMAND: STATUS / MAINTENANCE =====
-        if (textMsg === "status" || textMsg === "maintenance") {
-          let statusMsg = `📊 *STATUS MAINTENANCE*\n`;
-          statusMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-          const activeMaintenances = Object.entries(maintenanceMode);
-
-          if (activeMaintenances.length === 0) {
-            statusMsg += `✅ Tidak ada monitor dalam mode maintenance.`;
-          } else {
-            statusMsg += `🔧 Monitor dalam maintenance:\n\n`;
-
-            activeMaintenances.forEach(([key, endTime], idx) => {
-              const timeLeft = endTime - Date.now();
-              const minutesLeft = Math.ceil(timeLeft / 60000);
-              const endTimeStr = new Date(endTime).toLocaleString("id-ID", {
-                hour: "2-digit",
-                minute: "2-digit",
-              });
-
-              statusMsg += `${idx + 1}. *${key}*\n`;
-              statusMsg += `   ⏰ Selesai: ${endTimeStr} (${minutesLeft} menit lagi)\n\n`;
-            });
-          }
-
-          if (await canSendMessage(from)) {
-            await new Promise((r) =>
-              setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
-            );
-            await sock.sendMessage(from, { text: statusMsg });
-            await recordMessageSent(from);
-          }
-        }
-
-        // ===== COMMAND: MAINTENANCE <DURATION> =====
+ // ===== COMMAND: MAINTENANCE <DURATION> =====
         if (textMsg.startsWith("maintenance ")) {
           const args = textMsg.split(" ");
           if (args.length === 2) {
@@ -1192,7 +1234,7 @@ async function connectToWhatsApp() {
 
               if (latestDownMonitor) {
                 const endTime = addToMaintenance(latestDownMonitor, durationMs);
-                const durationStr = formatDuration(durationMs);
+                const durationStrFormatted = formatDuration(durationMs);
                 const endTimeStr = new Date(endTime).toLocaleString("id-ID", {
                   day: "2-digit",
                   month: "2-digit",
@@ -1204,7 +1246,7 @@ async function connectToWhatsApp() {
                 let responseMsg = `✅ *MAINTENANCE DURATION DIUBAH*\n`;
                 responseMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
                 responseMsg += `🔧 Monitor: ${latestDownMonitor}\n`;
-                responseMsg += `⏰ Durasi Baru: ${durationStr}\n`;
+                responseMsg += `⏰ Durasi Baru: ${durationStrFormatted}\n`;
                 responseMsg += `📅 Sampai: ${endTimeStr}\n`;
 
                 if (await canSendMessage(from)) {
