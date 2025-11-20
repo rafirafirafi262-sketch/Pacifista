@@ -38,8 +38,8 @@ const HIERARCHY = {
   pimpinan: "628995897629@s.whatsapp.net",
 };
 
-async function cekStatusMonitor() {
-  console.log("🔎 Mengecek perubahan status monitor...");
+// async function cekStatusMonitor() {
+//   console.log("🔎 Mengecek perubahan status monitor...");
 
   let browser = null;
   const messageToSend = [];
