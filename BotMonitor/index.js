@@ -31,8 +31,14 @@ function saveHierarchy(data) {
 
 // KONFIGURASI
 const STATUS_PAGES = [
-  { name: "CCTV Publik", slug: "bot-cctvpublic" },
-  { name: "hotel", slug: "bot-hotel" },
+   { 
+    name: "CCTV Publik",     
+    slug: "bot-cctvpublic" 
+  },
+  { 
+    name: "Hotel",         
+    slug: "bot-hotel" 
+  },
 ];
 
 const ANTI_SPAM_CONFIG = {
@@ -67,6 +73,7 @@ const maintenanceMode = {};
 
 // ===== HISTORY TRACKING =====
 const monitorHistory = {}; // Format: { "monitor-key": [{ timestamp, status, duration }] }
+const categoryStats = {};
 const monitorSessionStart = {}; // Format: { "monitor-key": timestamp }
 
 function saveHierarchy(data) {
@@ -121,8 +128,17 @@ function getTodayStats(monitorKey) {
     (e) => e.timestamp >= todayStart
   );
 
-  let downEvents = events.filter((e) => e.status === "offline");
+  // SESUDAH: Hitung durasi akumulatif
   let totalDowntime = 0;
+  for (const event of events) {
+    if (event.status === "offline" && event.duration) {
+      totalDowntime += event.duration;
+    }
+  }
+  // Tambahan: Jika monitor masih offline, hitung downtime yang berlangsung
+  if (sentOffline[key]) {
+    totalDowntime += (Date.now() - monitorDownTime[key].getTime());
+  }
 
   downEvents.forEach((e) => {
     if (e.duration) totalDowntime += e.duration;
@@ -162,6 +178,13 @@ function getWeeklyStats(monitorKey) {
   };
 }
 
+const parseMonitorKey = (key) => {
+  const parts = key.split(" - ");
+  return {
+    category: parts[0],
+    name: parts.slice(1).join(" - ")
+  };
+};
 // ===== FUNGSI UTILITY =====
 function formatDuration(ms) {
   if (ms <= 0) return "0 detik";
