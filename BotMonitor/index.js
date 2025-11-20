@@ -74,7 +74,7 @@ const maintenanceMode = {};
 // ===== HISTORY TRACKING =====
 const monitorHistory = {}; // Format: { "monitor-key": [{ timestamp, status, duration }] }
 const categoryStats = {};
-const monitorSessionStart = {}; // Format: { "monitor-key": timestamp }
+
 
 function saveHierarchy(data) {
   fs.writeFileSync(HIERARCHY_FILE, JSON.stringify(data, null, 2));
