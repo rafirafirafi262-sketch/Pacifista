@@ -12,6 +12,21 @@ const path = require("path");
 const pino = require("pino");
 
 const HIERARCHY_FILE = path.join(__dirname, "hierarchy.json");
+const SESSION_START_FILE = path.join(__dirname, "monitor-sessions.json"); // TAMBAH INI
+
+// TAMBAH fungsi ini
+function loadMonitorSessions() {
+  if (fs.existsSync(SESSION_START_FILE)) {
+    const data = fs.readFileSync(SESSION_START_FILE, "utf-8");
+    return JSON.parse(data);
+  }
+  return {};
+}
+
+// TAMBAH fungsi ini
+function saveMonitorSessions() {
+  fs.writeFileSync(SESSION_START_FILE, JSON.stringify(monitorSessionStart, null, 2));
+}
 function loadHierarchy() {
   if (fs.existsSync(HIERARCHY_FILE)) {
     const data = fs.readFileSync(HIERARCHY_FILE, "utf-8");
@@ -59,8 +74,7 @@ let isConnecting = false;
 let monitoringInterval = null;
 let escalationInterval = null;
 let weeklyReportInterval = null;
-const monitorSessionStart = {}; // Track kapan monitor pertama kali terdeteksi online
-
+const monitorSessionStart = loadMonitorSessions();
 // STATE VARIABLES
 const monitorDownCount = {};
 const lastStatuses = {};
@@ -130,18 +144,17 @@ function getTodayStats(monitorKey) {
 
   const downEvents = events.filter((e) => e.status === "offline");
 
-  // FIXED: Hitung durasi akumulatif dengan benar
+  // Hitung durasi akumulatif
   let totalDowntime = 0;
   downEvents.forEach((e) => {
     if (e.duration) totalDowntime += e.duration;
   });
 
-  // FIXED: Gunakan monitorKey bukan 'key'
+  // Tambahkan downtime yang sedang berjalan
   if (sentOffline[monitorKey] && monitorDownTime[monitorKey]) {
     totalDowntime += (Date.now() - monitorDownTime[monitorKey].getTime());
   }
 
-  // Check if monitor ever went online
   const hasBeenOnline = monitorSessionStart[monitorKey] !== undefined;
 
   return {
@@ -173,23 +186,34 @@ function getWeeklyStats(monitorKey) {
 
   const hasBeenOnline = monitorSessionStart[monitorKey] !== undefined;
   
-  // Hitung periode monitoring (dari pertama online atau 7 hari)
-  let monitoringPeriod = 7 * 24 * 60 * 60 * 1000;
+  // ===== FIX UTAMA DI SINI =====
+  let monitoringPeriod = 0;
+  let uptime = 0;
+  let uptimePercent = "N/A";
+
   if (hasBeenOnline) {
     const sessionStart = monitorSessionStart[monitorKey];
     const periodStart = Math.max(sessionStart, sevenDaysAgo);
+    
+    // Hitung periode AKTUAL sejak monitor pertama kali online
     monitoringPeriod = Date.now() - periodStart;
+    
+    // Uptime = periode monitoring - total downtime
+    uptime = Math.max(0, monitoringPeriod - totalDowntime);
+    
+    // Hitung persentase uptime
+    if (monitoringPeriod > 0) {
+      uptimePercent = ((uptime / monitoringPeriod) * 100).toFixed(2);
+    } else {
+      uptimePercent = "0.00";
+    }
   }
-
-  const uptime = monitoringPeriod - totalDowntime;
-  const uptimePercent = hasBeenOnline && monitoringPeriod > 0
-    ? Math.max(0, Math.min(100, (uptime / monitoringPeriod) * 100)).toFixed(2)
-    : "0.00";
+  // ===== AKHIR FIX =====
 
   return {
     downCount: downEvents.length,
     totalDowntime: totalDowntime,
-    uptime: Math.max(0, uptime),
+    uptime: uptime,
     uptimePercent: uptimePercent,
     monitoringPeriod: monitoringPeriod,
     events: events.length,
@@ -369,10 +393,10 @@ async function sendStatsMessage(from, isWeekly = false) {
   const onlineMonitors = allMonitors.filter(m => m.hasBeenOnline);
   
   if (onlineMonitors.length > 0) {
-    // Hitung rata-rata uptime dari monitor yang pernah online saja
-    const totalUptimePercent = onlineMonitors.reduce(
-      (sum, s) => sum + parseFloat(s.uptimePercent), 0
-    );
+    const totalUptimePercent = onlineMonitors.reduce((sum, s) => {
+      const uptimeNum = parseFloat(s.uptimePercent);
+      return sum + (isNaN(uptimeNum) ? 0 : uptimeNum);
+    }, 0);
     const avgUptime = (totalUptimePercent / onlineMonitors.length).toFixed(2);
     statsMsg += `Rata-rata uptime: ${avgUptime}%\n`;
   }
@@ -726,7 +750,8 @@ async function cekStatusMonitor() {
           } else {
             if (!monitorSessionStart[key]) {
                 monitorSessionStart[key] = Date.now();
-               console.log(`🟢 ${key} pertama kali terdeteksi online`);
+               saveMonitorSessions(); // TAMBAH INI
+               //console.log(`🟢 ${key} pertama kali terdeteksi online`);
           }
             if (sentOffline[key]) {
               const downTime = monitorDownTime[key];
@@ -1102,11 +1127,14 @@ async function connectToWhatsApp() {
         console.log("✅ Berhasil terhubung ke WhatsApp!");
         isConnecting = false;
 
-            for (const key of Object.keys(lastStatuses)) {
-      if (lastStatuses[key] === "online" && !monitorSessionStart[key]) {
-        monitorSessionStart[key] = Date.now();
-      }
-    }
+             // Inisialisasi session start untuk monitor yang sudah ada
+        for (const key of Object.keys(lastStatuses)) {
+          if (lastStatuses[key] === "online" && !monitorSessionStart[key]) {
+            monitorSessionStart[key] = Date.now();
+            console.log(`📝 Inisialisasi session untuk ${key}`);
+          }
+        }
+        saveMonitorSessions(); // Simpan setelah inisialisasi
 
         if (!monitoringStarted) {
           console.log("⏳ Menunggu 10 menit sebelum monitoring pertama...");
