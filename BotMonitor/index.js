@@ -976,12 +976,12 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
     targetHierarchy = HIERARCHY.atasan;
     nextLevel = "atasan";
     waitTime = "1 Jam";
-    title = `⚠️ ESKALASI LEVEL 1: ATASAN (${keysToEscalate.length} Monitor)`;
+    title = `⚠️ ESKALASI LEVEL 1: ATASAN (${keysToEscalate.length} Monitor)\n ketik help untuk bantuan`;
   } else {
     targetHierarchy = HIERARCHY.pimpinan;
     nextLevel = "pimpinan";
     waitTime = "2 Jam";
-    title = `🚨 ESKALASI LEVEL 2: PIMPINAN (${keysToEscalate.length} Monitor)`;
+    title = `🚨 ESKALASI LEVEL 2: PIMPINAN (${keysToEscalate.length} Monitor)\n ketik help untuk bantuan;
   }
 
   let body = [];
