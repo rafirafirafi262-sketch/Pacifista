@@ -860,7 +860,7 @@ async function cekStatusMonitor() {
             : "N/A";
 
         const title = `LAPORAN MONITORING SYSTEM\n🛑 DOWN SEJAK ${earliestDownTimes}\n\n*DAFTAR MONITOR DOWN:*\n`;
-        const bodyMessages = offlineMessages.map((m) => `🛑 ${m}`).join("\n");
+        const bodyMessages = offlineMessages.map((m) => `- ${m}`).join("\n");
         const finalMessages = title + bodyMessages;
 
         console.log(
@@ -994,7 +994,7 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
       ? new Date(monitorDownTime[key]).toLocaleString("id-ID")
       : "N/A";
 
-    body.push(`- *${key}* (Down Sejak: ${initialDownTime})`);
+    body.push(`🔴 *${key}* (Down Sejak: ${initialDownTime})`);
 
     escalationQueue[key].level = nextLevel;
     escalationQueue[key].lastSent = Date.now();
