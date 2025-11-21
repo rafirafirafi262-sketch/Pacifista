@@ -17,15 +17,39 @@ const SESSION_START_FILE = path.join(__dirname, "monitor-sessions.json"); // TAM
 // TAMBAH fungsi ini
 function loadMonitorSessions() {
   if (fs.existsSync(SESSION_START_FILE)) {
-    const data = fs.readFileSync(SESSION_START_FILE, "utf-8");
-    return JSON.parse(data);
+    try {
+      const data = fs.readFileSync(SESSION_START_FILE, "utf-8");
+      
+      // Cek apakah file kosong
+      if (!data || data.trim() === "") {
+        console.log("⚠️ File monitor-sessions.json kosong, buat baru");
+        return {};
+      }
+      
+      return JSON.parse(data);
+    } catch (error) {
+      console.error("❌ Error membaca monitor-sessions.json:", error.message);
+      console.log("🔄 Membuat file baru...");
+      
+      // Backup file yang error
+      const backupFile = SESSION_START_FILE + ".backup-" + Date.now();
+      fs.copyFileSync(SESSION_START_FILE, backupFile);
+      console.log(`📦 File lama di-backup ke: ${backupFile}`);
+      
+      return {};
+    }
   }
   return {};
 }
 
 // TAMBAH fungsi ini
 function saveMonitorSessions() {
-  fs.writeFileSync(SESSION_START_FILE, JSON.stringify(monitorSessionStart, null, 2));
+  try {
+    fs.writeFileSync(SESSION_START_FILE, JSON.stringify(monitorSessionStart, null, 2));
+    console.log("💾 Monitor sessions berhasil disimpan");
+  } catch (error) {
+    console.error("❌ Gagal menyimpan monitor-sessions.json:", error.message);
+  }
 }
 function loadHierarchy() {
   if (fs.existsSync(HIERARCHY_FILE)) {
