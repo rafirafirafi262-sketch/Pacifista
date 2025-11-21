@@ -174,9 +174,13 @@ function getTodayStats(monitorKey) {
     if (e.duration) totalDowntime += e.duration;
   });
 
-  // Tambahkan downtime yang sedang berjalan
-  if (sentOffline[monitorKey] && monitorDownTime[monitorKey]) {
-    totalDowntime += (Date.now() - monitorDownTime[monitorKey].getTime());
+  const isCurrentlyOffline = lastStatuses[monitorKey] === "offline";
+  
+  if (isCurrentlyOffline && monitorDownTime[monitorKey]) {
+    const currentDowntime = Date.now() - monitorDownTime[monitorKey].getTime();
+    totalDowntime += currentDowntime;
+    
+    console.log(`⚠️ ${monitorKey} sedang offline: +${formatDuration(currentDowntime)}`);
   }
 
   const hasBeenOnline = monitorSessionStart[monitorKey] !== undefined;
@@ -203,9 +207,14 @@ function getWeeklyStats(monitorKey) {
     if (e.duration) totalDowntime += e.duration;
   });
 
-  // Add current downtime if still offline
-  if (sentOffline[monitorKey] && monitorDownTime[monitorKey]) {
-    totalDowntime += (Date.now() - monitorDownTime[monitorKey].getTime());
+  const isCurrentlyOffline = lastStatuses[monitorKey] === "offline";
+  
+  if (isCurrentlyOffline && monitorDownTime[monitorKey]) {
+    // Monitor sedang offline SEKARANG, hitung durasi real-time
+    const currentDowntime = Date.now() - monitorDownTime[monitorKey].getTime();
+    totalDowntime += currentDowntime;
+    
+    console.log(`⚠️ ${monitorKey} sedang offline: +${formatDuration(currentDowntime)}`);
   }
 
   const hasBeenOnline = monitorSessionStart[monitorKey] !== undefined;
@@ -268,6 +277,14 @@ function formatDuration(ms) {
   if (seconds > 0 && result.length === 0) result.push(`${seconds}d`);
 
   return result.slice(0, 2).join(" ");
+}
+// ===== FUNGSI QUIET HOURS =====
+function isQuietHours() {
+  const now = new Date();
+  const hour = now.getHours();
+  
+  // Quiet hours: 00:00 - 04:00 (12 malam - 4 pagi)
+  return hour >= 0 && hour < 4;
 }
 
 // ===== FUNGSI MAINTENANCE MODE =====
@@ -687,6 +704,11 @@ async function cekStatusMonitor() {
     console.log("⏳ Pengecekan sebelumnya belum selesai, skip...");
     return;
   }
+   // ===== CEK QUIET HOURS =====
+  if (isQuietHours()) {
+    console.log("🌙 QUIET HOURS AKTIF (00:00-04:00) - Skip monitoring");
+    return;
+  }
 
   isChecking = true;
   console.log("🔍 Mengecek status monitor...", new Date().toLocaleTimeString());
@@ -891,6 +913,10 @@ let isEscalating = false;
 async function runEscalationChecks() {
   if (isEscalating) {
     console.log("⏳ Proses eskalasi sebelumnya belum selesai, skip...");
+    return;
+  }
+  if (isQuietHours()) {
+    console.log("🌙 QUIET HOURS AKTIF (00:00-04:00) - Skip eskalasi");
     return;
   }
 
