@@ -57,9 +57,9 @@ function loadHierarchy() {
     return JSON.parse(data);
   }
   return {
-    admin: "6285934964784@s.whatsapp.net",
-    atasan: "6282283595329@s.whatsapp.net",
-    pimpinan: "628995897629@s.whatsapp.net",
+    admin: "628@s.whatsapp.net",
+    atasan: "628@s.whatsapp.net",
+    pimpinan: "62@s.whatsapp.net", //isi sesuai nomor yang ingin di set
   };
 }
 
