@@ -1282,6 +1282,39 @@ async function connectToWhatsApp() {
             }
           }
         }
+         // ===== COMMAND: STATUS / MAINTENANCE =====
+        if (textMsg === "status" || textMsg === "maintenance") {
+          let statusMsg = `📊 *STATUS MAINTENANCE*\n`;
+          statusMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+          const activeMaintenances = Object.entries(maintenanceMode);
+
+          if (activeMaintenances.length === 0) {
+            statusMsg += `✅ Tidak ada monitor dalam mode maintenance.`;
+          } else {
+            statusMsg += `🔧 Monitor dalam maintenance:\n\n`;
+
+            activeMaintenances.forEach(([key, endTime], idx) => {
+              const timeLeft = endTime - Date.now();
+              const minutesLeft = Math.ceil(timeLeft / 60000);
+              const endTimeStr = new Date(endTime).toLocaleString("id-ID", {
+                hour: "2-digit",
+                minute: "2-digit",
+              });
+
+              statusMsg += `${idx + 1}. *${key}*\n`;
+              statusMsg += `   ⏰ Selesai: ${endTimeStr} (${minutesLeft} menit lagi)\n\n`;
+            });
+          }
+
+          if (await canSendMessage(from)) {
+            await new Promise((r) =>
+              setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+            );
+            await sock.sendMessage(from, { text: statusMsg });
+            await recordMessageSent(from);
+          }
+        }
 
  // ===== COMMAND: MAINTENANCE <DURATION> =====
         if (textMsg.startsWith("maintenance ")) {
