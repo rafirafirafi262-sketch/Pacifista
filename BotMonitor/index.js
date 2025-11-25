@@ -1245,6 +1245,14 @@ async function connectToWhatsApp() {
   if (!msg.message || !msg.key.remoteJid) return;
 
   const from = msg.key.remoteJid;
+      
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("📨 Pesan masuk dari:", from);
+  console.log("📋 Admin saat ini:", HIERARCHY.admin);
+  console.log("📋 Atasan saat ini:", HIERARCHY.atasan);
+  console.log("📋 Pimpinan saat ini:", HIERARCHY.pimpinan);
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+  
   const textMsg = (
     msg.message.conversation ||
     msg.message.extendedTextMessage?.text ||
