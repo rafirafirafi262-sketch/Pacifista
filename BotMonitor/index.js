@@ -424,7 +424,9 @@ async function sendStatsMessage(from, isWeekly = false) {
         statsMsg += `   Status: ${
           lastStatuses[stat.fullKey] === "online" ? "🟢 Online" : "🔴 Offline"
         }\n`;
-               if (!stat.hasBeenOnline) {
+        
+        // Cek apakah monitor pernah online
+        if (!stat.hasBeenOnline) {
           statsMsg += `   ⚠️ Belum pernah terdeteksi online\n`;
           statsMsg += `   Total downtime: ${formatDuration(stat.totalDowntime)}\n`;
         } else {
@@ -435,54 +437,45 @@ async function sendStatsMessage(from, isWeekly = false) {
             statsMsg += `   Uptime: ${stat.uptimePercent}%\n`;
           }
         }
-         statsMsg += `\n`;
+        
+        statsMsg += `\n`;
       });
-     
-       if (isWeekly) {
-  const allMonitors = Object.values(categoryGroups).flat();
-  const onlineMonitors = allMonitors.filter(m => m.hasBeenOnline);
-  
-  if (onlineMonitors.length > 0) {
-    const totalUptimePercent = onlineMonitors.reduce((sum, s) => {
-      const uptimeNum = parseFloat(s.uptimePercent);
-      return sum + (isNaN(uptimeNum) ? 0 : uptimeNum);
-    }, 0);
-    const avgUptime = (totalUptimePercent / onlineMonitors.length).toFixed(2);
-    statsMsg += `Rata-rata uptime: ${avgUptime}%\n`;
-  }
-}
+    } // ← KURUNG KURAWAL PENUTUP LOOP KATEGORI
 
+    // Summary section
     statsMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     statsMsg += `*TOTAL ${isWeekly ? "MINGGU" : "HARI"}:*\n`;
     statsMsg += `Total down: ${totalDownCount}x\n`;
     statsMsg += `Total downtime: ${formatDuration(totalDowntime)}\n`;
 
+    // Weekly specific stats
     if (isWeekly) {
-  const allMonitors = Object.values(categoryGroups).flat();
-  const onlineMonitors = allMonitors.filter(m => m.hasBeenOnline);
-  const neverOnlineMonitors = allMonitors.filter(m => !m.hasBeenOnline);
-  
-  if (onlineMonitors.length > 0) {
-    const totalUptimePercent = onlineMonitors.reduce((sum, s) => {
-      const uptimeNum = parseFloat(s.uptimePercent);
-      return sum + (isNaN(uptimeNum) ? 0 : uptimeNum);
-    }, 0);
-    const avgUptime = (totalUptimePercent / onlineMonitors.length).toFixed(2);
-    statsMsg += `Rata-rata uptime: ${avgUptime}%\n`;
-  }
-  
-  // TAMBAHAN: Tampilkan monitor yang belum pernah online
-  if (neverOnlineMonitors.length > 0) {
-    statsMsg += `⚠️ Monitor belum pernah online: ${neverOnlineMonitors.length}\n`;
-  }
-}
+      const allMonitors = Object.values(categoryGroups).flat();
+      const onlineMonitors = allMonitors.filter(m => m.hasBeenOnline);
+      const neverOnlineMonitors = allMonitors.filter(m => !m.hasBeenOnline);
+      
+      if (onlineMonitors.length > 0) {
+        const totalUptimePercent = onlineMonitors.reduce((sum, s) => {
+          const uptimeNum = parseFloat(s.uptimePercent);
+          return sum + (isNaN(uptimeNum) ? 0 : uptimeNum);
+        }, 0);
+        const avgUptime = (totalUptimePercent / onlineMonitors.length).toFixed(2);
+        statsMsg += `Rata-rata uptime: ${avgUptime}%\n`;
+      }
+      
+      if (neverOnlineMonitors.length > 0) {
+        statsMsg += `⚠️ Monitor belum pernah online: ${neverOnlineMonitors.length}\n`;
+      }
+    }
+  } 
 
+  // Send message
   if (await canSendMessage(from)) {
     await new Promise((r) => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
     await sock.sendMessage(from, { text: statsMsg });
     await recordMessageSent(from);
   }
-}
+} 
 async function forceCheckMonitors(from) {
   let msg = `⏳ Sedang melakukan pengecekan status monitor...\n\n`;
 
