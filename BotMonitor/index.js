@@ -1253,11 +1253,16 @@ async function connectToWhatsApp() {
         .toLowerCase()
         .trim();
 
-      if (
+      // ✅ CEK APAKAH PENGIRIM ADALAH BAGIAN DARI HIERARCHY
+      const isAuthorized = 
         from === HIERARCHY.admin ||
         from === HIERARCHY.atasan ||
-        from === HIERARCHY.pimpinan
-      ) {
+        from === HIERARCHY.pimpinan;
+    
+      if (!isAuthorized) {
+        // ❌ BUKAN BAGIAN HIERARCHY - IGNORE
+        return;
+      }
         // ===== COMMAND: HELP =====
         if (textMsg === "help") {
           console.log(`❓ Help diminta dari ${from}`);
