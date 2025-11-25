@@ -1297,6 +1297,8 @@ async function connectToWhatsApp() {
 
       // Normalisasi ke format @s.whatsapp.net
       const realSender = normalizeJid(senderJid);
+      const from = msg.key.remoteJid;               // tempat pengirim pesan (device / grup)
+      const sender = realSender;   
 
       if (!realSender) {
         console.error(`❌ Gagal menormalisasi JID: ${senderJid}`);
