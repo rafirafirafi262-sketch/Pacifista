@@ -1240,18 +1240,11 @@ async function connectToWhatsApp() {
       }
     });
 
-    sock.ev.on("messages.upsert", async ({ messages }) => {
+   sock.ev.on("messages.upsert", async ({ messages }) => {
   const msg = messages[0];
   if (!msg.message || !msg.key.remoteJid) return;
 
   const from = msg.key.remoteJid;
-      
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("📨 Pesan masuk dari:", from);
-  console.log("📋 Admin saat ini:", HIERARCHY.admin);
-  console.log("📋 Atasan saat ini:", HIERARCHY.atasan);
-  console.log("📋 Pimpinan saat ini:", HIERARCHY.pimpinan);
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
   
   const textMsg = (
     msg.message.conversation ||
@@ -1261,52 +1254,73 @@ async function connectToWhatsApp() {
     .toLowerCase()
     .trim();
 
-  // ✅ CEK APAKAH PENGIRIM ADALAH BAGIAN DARI HIERARCHY
+  // ✅ FUNGSI NORMALISASI JID (SUPPORT @lid)
+  function getNormalizedSender() {
+    // Jika pesan dari linked device (@lid), cari nomor asli
+    if (from.includes('@lid')) {
+      // Cek participant (untuk pesan dari linked device)
+      const participant = msg.key.participant || msg.participant;
+      if (participant && participant.includes('@s.whatsapp.net')) {
+        console.log(`🔗 Linked device: ${from} → Real number: ${participant}`);
+        return participant;
+      }
+    }
+    return from;
+  }
+
+  const realSender = getNormalizedSender();
+  
+  // ✅ DEBUG LOG (bisa dihapus setelah testing)
+  if (from !== realSender) {
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("📱 Device JID:", from);
+    console.log("📞 Real Number:", realSender);
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+  }
+
+  // ✅ CEK AUTHORIZATION
   const isAuthorized = 
-    from === HIERARCHY.admin ||
-    from === HIERARCHY.atasan ||
-    from === HIERARCHY.pimpinan;
+    realSender === HIERARCHY.admin ||
+    realSender === HIERARCHY.atasan ||
+    realSender === HIERARCHY.pimpinan;
 
   if (!isAuthorized) {
-    // ❌ BUKAN BAGIAN HIERARCHY - IGNORE
     return;
   }
 
-  // ✅ SEMUA ROLE BISA AKSES COMMAND DI BAWAH INI
-
   // ===== COMMAND: HELP =====
   if (textMsg === "help") {
-    console.log(`❓ Help diminta dari ${from}`);
-    await sendHelpMessage(from);
+    console.log(`❓ Help diminta dari ${realSender}`);
+    await sendHelpMessage(from); // Kirim ke 'from' (device), bukan 'realSender'
     return;
   }
 
   // ===== COMMAND: STATS =====
   if (textMsg === "stats") {
-    console.log(`📊 Stats diminta dari ${from}`);
+    console.log(`📊 Stats diminta dari ${realSender}`);
     await sendStatsMessage(from, false);
     return;
   }
 
   // ===== COMMAND: WEEKLY =====
   if (textMsg === "weekly") {
-    console.log(`📊 Weekly stats diminta dari ${from}`);
+    console.log(`📊 Weekly stats diminta dari ${realSender}`);
     await sendStatsMessage(from, true);
     return;
   }
 
   // ===== COMMAND: CHECK =====
   if (textMsg === "check") {
-    console.log(`🔄 Force-check diminta dari ${from}`);
+    console.log(`🔄 Force-check diminta dari ${realSender}`);
     await forceCheckMonitors(from);
     return;
   }
 
   // ===== COMMAND: OK (KONFIRMASI) =====
   if (textMsg.startsWith("ok")) {
-    console.log(`✅ Konfirmasi diterima dari ${from}`);
+    console.log(`✅ Konfirmasi diterima dari ${realSender}`);
 
-    const confirmedMonitors = handleAcknowledgement(from);
+    const confirmedMonitors = handleAcknowledgement(realSender); // ← Pakai realSender
 
     if (confirmedMonitors.length > 0) {
       const maintenanceEndTime = new Date(
@@ -1397,7 +1411,6 @@ async function connectToWhatsApp() {
       const durationMs = parseMaintenanceDuration(durationStr);
 
       if (durationMs) {
-        // Cari monitor yang paling baru down
         let latestDownMonitor = null;
         let latestDownTime = 0;
 
@@ -1457,13 +1470,12 @@ async function connectToWhatsApp() {
   }
 
   // ===== COMMAND: SET ADMIN / ATASAN / PIMPINAN =====
-  // ⚠️ HANYA ADMIN YANG BISA MENGUBAH HIERARCHY
   if (
     textMsg.startsWith("set admin") ||
     textMsg.startsWith("set atasan") ||
     textMsg.startsWith("set pimpinan")
   ) {
-    if (from !== HIERARCHY.admin) {
+    if (realSender !== HIERARCHY.admin) { // ← Pakai realSender
       const notAllowedMsg = `❌ Hanya admin yang bisa mengubah nomor hierarki.`;
       if (await canSendMessage(from)) {
         await sock.sendMessage(from, { text: notAllowedMsg });
@@ -1482,7 +1494,7 @@ async function connectToWhatsApp() {
       return;
     }
 
-    const role = parts[1]; // admin, atasan, pimpinan
+    const role = parts[1];
     const rawNumber = parts[2];
     const formattedNumber = formatPhoneNumber(rawNumber);
 
