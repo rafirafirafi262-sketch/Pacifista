@@ -1241,249 +1241,263 @@ async function connectToWhatsApp() {
     });
 
     sock.ev.on("messages.upsert", async ({ messages }) => {
-      const msg = messages[0];
-      if (!msg.message || !msg.key.remoteJid) return;
+  const msg = messages[0];
+  if (!msg.message || !msg.key.remoteJid) return;
 
-      const from = msg.key.remoteJid;
-      const textMsg = (
-        msg.message.conversation ||
-        msg.message.extendedTextMessage?.text ||
-        ""
-      )
-        .toLowerCase()
-        .trim();
+  const from = msg.key.remoteJid;
+  const textMsg = (
+    msg.message.conversation ||
+    msg.message.extendedTextMessage?.text ||
+    ""
+  )
+    .toLowerCase()
+    .trim();
 
-      // ✅ CEK APAKAH PENGIRIM ADALAH BAGIAN DARI HIERARCHY
-      const isAuthorized = 
-        from === HIERARCHY.admin ||
-        from === HIERARCHY.atasan ||
-        from === HIERARCHY.pimpinan;
-    
-      if (!isAuthorized) {
-        // ❌ BUKAN BAGIAN HIERARCHY - IGNORE
-        return;
+  // ✅ CEK APAKAH PENGIRIM ADALAH BAGIAN DARI HIERARCHY
+  const isAuthorized = 
+    from === HIERARCHY.admin ||
+    from === HIERARCHY.atasan ||
+    from === HIERARCHY.pimpinan;
+
+  if (!isAuthorized) {
+    // ❌ BUKAN BAGIAN HIERARCHY - IGNORE
+    return;
+  }
+
+  // ✅ SEMUA ROLE BISA AKSES COMMAND DI BAWAH INI
+
+  // ===== COMMAND: HELP =====
+  if (textMsg === "help") {
+    console.log(`❓ Help diminta dari ${from}`);
+    await sendHelpMessage(from);
+    return;
+  }
+
+  // ===== COMMAND: STATS =====
+  if (textMsg === "stats") {
+    console.log(`📊 Stats diminta dari ${from}`);
+    await sendStatsMessage(from, false);
+    return;
+  }
+
+  // ===== COMMAND: WEEKLY =====
+  if (textMsg === "weekly") {
+    console.log(`📊 Weekly stats diminta dari ${from}`);
+    await sendStatsMessage(from, true);
+    return;
+  }
+
+  // ===== COMMAND: CHECK =====
+  if (textMsg === "check") {
+    console.log(`🔄 Force-check diminta dari ${from}`);
+    await forceCheckMonitors(from);
+    return;
+  }
+
+  // ===== COMMAND: OK (KONFIRMASI) =====
+  if (textMsg.startsWith("ok")) {
+    console.log(`✅ Konfirmasi diterima dari ${from}`);
+
+    const confirmedMonitors = handleAcknowledgement(from);
+
+    if (confirmedMonitors.length > 0) {
+      const maintenanceEndTime = new Date(
+        Date.now() + 60 * 60 * 1000
+      ).toLocaleString("id-ID", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      let responseMsg = `✅ *KONFIRMASI DITERIMA*\n`;
+      responseMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      responseMsg += `🔧 *STATUS: MODE MAINTENANCE*\n`;
+      responseMsg += `⏰ Durasi: 1 Jam\n`;
+      responseMsg += `📅 Sampai: ${maintenanceEndTime}\n\n`;
+      responseMsg += `*Monitor yang masuk maintenance:*\n`;
+
+      confirmedMonitors.forEach((monitor, idx) => {
+        responseMsg += `${idx + 1}. ${monitor}\n`;
+      });
+
+      responseMsg += `\n_Monitor ini tidak akan dipantau selama 1 jam._`;
+      responseMsg += `\n_Eskalasi otomatis dihentikan._`;
+
+      if (await canSendMessage(from)) {
+        await new Promise((r) =>
+          setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+        );
+        await sock.sendMessage(from, { text: responseMsg });
+        await recordMessageSent(from);
       }
-        // ===== COMMAND: HELP =====
-        if (textMsg === "help") {
-          console.log(`❓ Help diminta dari ${from}`);
-          await sendHelpMessage(from);
-        }
+    } else {
+      const noMonitorMsg = `ℹ️ Tidak ada monitor aktif yang perlu dikonfirmasi saat ini.`;
 
-        // ===== COMMAND: STATS =====
-        if (textMsg === "stats") {
-          console.log(`📊 Stats diminta dari ${from}`);
-          await sendStatsMessage(from, false);
-        }
+      if (await canSendMessage(from)) {
+        await new Promise((r) =>
+          setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+        );
+        await sock.sendMessage(from, { text: noMonitorMsg });
+        await recordMessageSent(from);
+      }
+    }
+    return;
+  }
 
-        if (textMsg === "weekly") {
-          console.log(`📊 Weekly stats diminta dari ${from}`);
-          await sendStatsMessage(from, true);
-        }
+  // ===== COMMAND: STATUS / MAINTENANCE =====
+  if (textMsg === "status" || textMsg === "maintenance") {
+    let statusMsg = `📊 *STATUS MAINTENANCE*\n`;
+    statusMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-        // ===== COMMAND: FORCE-CHECK =====
-        if (textMsg === "check") {
-          console.log(`🔄 Force-check diminta dari ${from}`);
-          await forceCheckMonitors(from);
-        }
+    const activeMaintenances = Object.entries(maintenanceMode);
 
-        // ===== COMMAND: OK (KONFIRMASI) =====
-        if (textMsg.startsWith("ok")) {
-          console.log(`✅ Konfirmasi diterima dari ${from}`);
+    if (activeMaintenances.length === 0) {
+      statusMsg += `✅ Tidak ada monitor dalam mode maintenance.`;
+    } else {
+      statusMsg += `🔧 Monitor dalam maintenance:\n\n`;
 
-          const confirmedMonitors = handleAcknowledgement(from);
+      activeMaintenances.forEach(([key, endTime], idx) => {
+        const timeLeft = endTime - Date.now();
+        const minutesLeft = Math.ceil(timeLeft / 60000);
+        const endTimeStr = new Date(endTime).toLocaleString("id-ID", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
 
-          if (confirmedMonitors.length > 0) {
-            const maintenanceEndTime = new Date(
-              Date.now() + 60 * 60 * 1000
-            ).toLocaleString("id-ID", {
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            });
+        statusMsg += `${idx + 1}. *${key}*\n`;
+        statusMsg += `   ⏰ Selesai: ${endTimeStr} (${minutesLeft} menit lagi)\n\n`;
+      });
+    }
 
-            let responseMsg = `✅ *KONFIRMASI DITERIMA*\n`;
-            responseMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-            responseMsg += `🔧 *STATUS: MODE MAINTENANCE*\n`;
-            responseMsg += `⏰ Durasi: 1 Jam\n`;
-            responseMsg += `📅 Sampai: ${maintenanceEndTime}\n\n`;
-            responseMsg += `*Monitor yang masuk maintenance:*\n`;
+    if (await canSendMessage(from)) {
+      await new Promise((r) =>
+        setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+      );
+      await sock.sendMessage(from, { text: statusMsg });
+      await recordMessageSent(from);
+    }
+    return;
+  }
 
-            confirmedMonitors.forEach((monitor, idx) => {
-              responseMsg += `${idx + 1}. ${monitor}\n`;
-            });
+  // ===== COMMAND: MAINTENANCE <DURATION> =====
+  if (textMsg.startsWith("maintenance ")) {
+    const args = textMsg.split(" ");
+    if (args.length === 2) {
+      const durationStr = args[1];
+      const durationMs = parseMaintenanceDuration(durationStr);
 
-            responseMsg += `\n_Monitor ini tidak akan dipantau selama 1 jam._`;
-            responseMsg += `\n_Eskalasi otomatis dihentikan._`;
+      if (durationMs) {
+        // Cari monitor yang paling baru down
+        let latestDownMonitor = null;
+        let latestDownTime = 0;
 
-            if (await canSendMessage(from)) {
-              await new Promise((r) =>
-                setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
-              );
-              await sock.sendMessage(from, { text: responseMsg });
-              await recordMessageSent(from);
-            }
-          } else {
-            const noMonitorMsg = `ℹ️ Tidak ada monitor aktif yang perlu dikonfirmasi saat ini.`;
-
-            if (await canSendMessage(from)) {
-              await new Promise((r) =>
-                setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
-              );
-              await sock.sendMessage(from, { text: noMonitorMsg });
-              await recordMessageSent(from);
-            }
+        for (const [key, downTime] of Object.entries(monitorDownTime)) {
+          if (downTime.getTime() > latestDownTime) {
+            latestDownTime = downTime.getTime();
+            latestDownMonitor = key;
           }
         }
-         // ===== COMMAND: STATUS / MAINTENANCE =====
-        if (textMsg === "status" || textMsg === "maintenance") {
-          let statusMsg = `📊 *STATUS MAINTENANCE*\n`;
-          statusMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-          const activeMaintenances = Object.entries(maintenanceMode);
+        if (latestDownMonitor) {
+          const endTime = addToMaintenance(latestDownMonitor, durationMs);
+          const durationStrFormatted = formatDuration(durationMs);
+          const endTimeStr = new Date(endTime).toLocaleString("id-ID", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
 
-          if (activeMaintenances.length === 0) {
-            statusMsg += `✅ Tidak ada monitor dalam mode maintenance.`;
-          } else {
-            statusMsg += `🔧 Monitor dalam maintenance:\n\n`;
-
-            activeMaintenances.forEach(([key, endTime], idx) => {
-              const timeLeft = endTime - Date.now();
-              const minutesLeft = Math.ceil(timeLeft / 60000);
-              const endTimeStr = new Date(endTime).toLocaleString("id-ID", {
-                hour: "2-digit",
-                minute: "2-digit",
-              });
-
-              statusMsg += `${idx + 1}. *${key}*\n`;
-              statusMsg += `   ⏰ Selesai: ${endTimeStr} (${minutesLeft} menit lagi)\n\n`;
-            });
-          }
+          let responseMsg = `✅ *MAINTENANCE DURATION DIUBAH*\n`;
+          responseMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+          responseMsg += `🔧 Monitor: ${latestDownMonitor}\n`;
+          responseMsg += `⏰ Durasi Baru: ${durationStrFormatted}\n`;
+          responseMsg += `📅 Sampai: ${endTimeStr}\n`;
 
           if (await canSendMessage(from)) {
             await new Promise((r) =>
               setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
             );
-            await sock.sendMessage(from, { text: statusMsg });
+            await sock.sendMessage(from, { text: responseMsg });
             await recordMessageSent(from);
           }
-        }
-
- // ===== COMMAND: MAINTENANCE <DURATION> =====
-        if (textMsg.startsWith("maintenance ")) {
-          const args = textMsg.split(" ");
-          if (args.length === 2) {
-            const durationStr = args[1];
-            const durationMs = parseMaintenanceDuration(durationStr);
-
-            if (durationMs) {
-              // Cari monitor yang paling baru down
-              let latestDownMonitor = null;
-              let latestDownTime = 0;
-
-              for (const [key, downTime] of Object.entries(monitorDownTime)) {
-                if (downTime.getTime() > latestDownTime) {
-                  latestDownTime = downTime.getTime();
-                  latestDownMonitor = key;
-                }
-              }
-
-              if (latestDownMonitor) {
-                const endTime = addToMaintenance(latestDownMonitor, durationMs);
-                const durationStrFormatted = formatDuration(durationMs);
-                const endTimeStr = new Date(endTime).toLocaleString("id-ID", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
-
-                let responseMsg = `✅ *MAINTENANCE DURATION DIUBAH*\n`;
-                responseMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-                responseMsg += `🔧 Monitor: ${latestDownMonitor}\n`;
-                responseMsg += `⏰ Durasi Baru: ${durationStrFormatted}\n`;
-                responseMsg += `📅 Sampai: ${endTimeStr}\n`;
-
-                if (await canSendMessage(from)) {
-                  await new Promise((r) =>
-                    setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
-                  );
-                  await sock.sendMessage(from, { text: responseMsg });
-                  await recordMessageSent(from);
-                }
-              } else {
-                const noDownMsg = `ℹ️ Tidak ada monitor yang sedang down saat ini.`;
-                if (await canSendMessage(from)) {
-                  await new Promise((r) =>
-                    setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
-                  );
-                  await sock.sendMessage(from, { text: noDownMsg });
-                  await recordMessageSent(from);
-                }
-              }
-            } else {
-              const invalidMsg = `❌ Format tidak valid. Gunakan: maintenance 2h, maintenance 30m, atau maintenance 1d`;
-              if (await canSendMessage(from)) {
-                await new Promise((r) =>
-                  setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
-                );
-                await sock.sendMessage(from, { text: invalidMsg });
-                await recordMessageSent(from);
-              }
-            }
-          }
-        }
-        // ===== COMMAND: SET ADMIN / ATASAN / PIMPINAN =====
-        if (
-          textMsg.startsWith("set admin") ||
-          textMsg.startsWith("set atasan") ||
-          textMsg.startsWith("set pimpinan")
-        ) {
-          if (from !== HIERARCHY.admin) {
-            const notAllowedMsg = `❌ Hanya admin yang bisa mengubah nomor hierarki.`;
-            if (await canSendMessage(from)) {
-              await sock.sendMessage(from, { text: notAllowedMsg });
-              await recordMessageSent(from);
-            }
-            return;
-          }
-
-          const parts = textMsg.split(" ");
-          if (parts.length !== 3) {
-            const usageMsg = `❌ Format salah. Gunakan:\nset admin 6285xxx\nset atasan 6281xxx\nset pimpinan 6289xxx`;
-            if (await canSendMessage(from)) {
-              await sock.sendMessage(from, { text: usageMsg });
-              await recordMessageSent(from);
-            }
-            return;
-          }
-
-          const role = parts[1]; // admin, atasan, pimpinan
-          const rawNumber = parts[2];
-          const formattedNumber = formatPhoneNumber(rawNumber);
-
-          if (!["admin", "atasan", "pimpinan"].includes(role)) {
-            const invalidRoleMsg = `❌ Role tidak valid. Gunakan: admin, atasan, atau pimpinan.`;
-            if (await canSendMessage(from)) {
-              await sock.sendMessage(from, { text: invalidRoleMsg });
-              await recordMessageSent(from);
-            }
-            return;
-          }
-
-          HIERARCHY[role] = formattedNumber;
-          saveHierarchy(HIERARCHY);
-
-          const successMsg = `✅ Nomor ${role} berhasil diubah menjadi: ${formattedNumber}`;
+        } else {
+          const noDownMsg = `ℹ️ Tidak ada monitor yang sedang down saat ini.`;
           if (await canSendMessage(from)) {
-            await sock.sendMessage(from, { text: successMsg });
+            await new Promise((r) =>
+              setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+            );
+            await sock.sendMessage(from, { text: noDownMsg });
             await recordMessageSent(from);
           }
+        }
+      } else {
+        const invalidMsg = `❌ Format tidak valid. Gunakan: maintenance 2h, maintenance 30m, atau maintenance 1d`;
+        if (await canSendMessage(from)) {
+          await new Promise((r) =>
+            setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+          );
+          await sock.sendMessage(from, { text: invalidMsg });
+          await recordMessageSent(from);
         }
       }
-    });
+    }
+    return;
+  }
+
+  // ===== COMMAND: SET ADMIN / ATASAN / PIMPINAN =====
+  // ⚠️ HANYA ADMIN YANG BISA MENGUBAH HIERARCHY
+  if (
+    textMsg.startsWith("set admin") ||
+    textMsg.startsWith("set atasan") ||
+    textMsg.startsWith("set pimpinan")
+  ) {
+    if (from !== HIERARCHY.admin) {
+      const notAllowedMsg = `❌ Hanya admin yang bisa mengubah nomor hierarki.`;
+      if (await canSendMessage(from)) {
+        await sock.sendMessage(from, { text: notAllowedMsg });
+        await recordMessageSent(from);
+      }
+      return;
+    }
+
+    const parts = textMsg.split(" ");
+    if (parts.length !== 3) {
+      const usageMsg = `❌ Format salah. Gunakan:\nset admin 6285xxx\nset atasan 6281xxx\nset pimpinan 6289xxx`;
+      if (await canSendMessage(from)) {
+        await sock.sendMessage(from, { text: usageMsg });
+        await recordMessageSent(from);
+      }
+      return;
+    }
+
+    const role = parts[1]; // admin, atasan, pimpinan
+    const rawNumber = parts[2];
+    const formattedNumber = formatPhoneNumber(rawNumber);
+
+    if (!["admin", "atasan", "pimpinan"].includes(role)) {
+      const invalidRoleMsg = `❌ Role tidak valid. Gunakan: admin, atasan, atau pimpinan.`;
+      if (await canSendMessage(from)) {
+        await sock.sendMessage(from, { text: invalidRoleMsg });
+        await recordMessageSent(from);
+      }
+      return;
+    }
+
+    HIERARCHY[role] = formattedNumber;
+    saveHierarchy(HIERARCHY);
+
+    const successMsg = `✅ Nomor ${role} berhasil diubah menjadi: ${formattedNumber}`;
+    if (await canSendMessage(from)) {
+      await sock.sendMessage(from, { text: successMsg });
+      await recordMessageSent(from);
+    }
+    return;
+  }
+});
 
     sock.ev.on("creds.update", saveCreds);
   } catch (err) {
