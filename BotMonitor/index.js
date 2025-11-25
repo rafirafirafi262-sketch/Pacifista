@@ -1122,15 +1122,20 @@ async function connectToWhatsApp() {
 
     console.log(`📂 Session loaded (Baileys v${version.join(".")})`);
 
-    sock = makeWASocket({
-      auth: state,
-      logger: pino({ level: "silent" }),
-      browser: ["CCTV Monitoring", "Chrome", "1.0.0"],
-      defaultQueryTimeoutMs: 60000,
-      connectTimeoutMs: 60000,
-      keepAliveIntervalMs: 30000,
-      printQRInTerminal: false,
-    });
+  sock = makeWASocket({
+  auth: state,
+  logger: pino({ level: "silent" }),
+  browser: ["CCTV Monitoring", "Chrome", "1.0.0"],
+  
+  defaultQueryTimeoutMs: 120000,  // Dari 60000 → 120000 (2 menit)
+  connectTimeoutMs: 120000,       // Dari 60000 → 120000 (2 menit)
+  keepAliveIntervalMs: 20000,     // Dari 30000 → 20000 (lebih sering ping)
+
+  retryRequestDelayMs: 5000,      // Delay antar retry request
+  maxMsgRetryCount: 5,            // Max retry untuk pesan
+  
+  printQRInTerminal: false,
+});
 
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
@@ -1154,6 +1159,13 @@ async function connectToWhatsApp() {
         console.log(`   Status Code: ${statusCode}`);
         console.log(`   Error: ${errorMsg}\n`);
 
+        if (statusCode === 408 || statusCode === DisconnectReason.timedOut) {
+        console.log("⏱️ TIMEOUT - Mencoba reconnect...");
+        await new Promise((resolve) => setTimeout(resolve, 15000)); // Tunggu 15 detik
+        connectToWhatsApp();
+        return;
+      }
+
         if (statusCode === DisconnectReason.badSession) {
           console.log("❌ BAD SESSION - Regenerating...");
           regenerateSession();
@@ -1169,6 +1181,12 @@ async function connectToWhatsApp() {
           console.log("🚫 LOGGED OUT - Regenerating session...");
           regenerateSession();
           return;
+        }
+        if (!statusCode || statusCode === DisconnectReason.connectionLost) {
+        console.log("🔌 CONNECTION LOST - Reconnecting...");
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+        connectToWhatsApp();
+        return;
         }
 
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
