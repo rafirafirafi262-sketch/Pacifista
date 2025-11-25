@@ -57,9 +57,9 @@ function loadHierarchy() {
     return JSON.parse(data);
   }
   return {
-    admin: "628@s.whatsapp.net",
-    atasan: "628@s.whatsapp.net",
-    pimpinan: "62@s.whatsapp.net", //isi sesuai nomor yang ingin di set
+    admin: "6281325186205@s.whatsapp.net",
+    atasan: "628995897629@s.whatsapp.net",
+    pimpinan: "6285934964784@s.whatsapp.net", //isi sesuai nomor yang ingin di set
   };
 }
 
@@ -424,11 +424,20 @@ async function sendStatsMessage(from, isWeekly = false) {
         statsMsg += `   Status: ${
           lastStatuses[stat.fullKey] === "online" ? "🟢 Online" : "🔴 Offline"
         }\n`;
-        statsMsg += `   Down ${isWeekly ? "minggu ini" : "hari ini"}: ${
-          stat.downCount
-        }x\n`;
-        statsMsg += `   Total downtime: ${formatDuration(stat.totalDowntime)}\n`;
-
+               if (!stat.hasBeenOnline) {
+          statsMsg += `   ⚠️ Belum pernah terdeteksi online\n`;
+          statsMsg += `   Total downtime: ${formatDuration(stat.totalDowntime)}\n`;
+        } else {
+          statsMsg += `   Down ${isWeekly ? "minggu ini" : "hari ini"}: ${stat.downCount}x\n`;
+          statsMsg += `   Total downtime: ${formatDuration(stat.totalDowntime)}\n`;
+          
+          if (isWeekly) {
+            statsMsg += `   Uptime: ${stat.uptimePercent}%\n`;
+          }
+        }
+         statsMsg += `\n`;
+      });
+     
        if (isWeekly) {
   const allMonitors = Object.values(categoryGroups).flat();
   const onlineMonitors = allMonitors.filter(m => m.hasBeenOnline);
@@ -454,16 +463,24 @@ async function sendStatsMessage(from, isWeekly = false) {
     statsMsg += `Total downtime: ${formatDuration(totalDowntime)}\n`;
 
     if (isWeekly) {
-      const allMonitors = Object.values(categoryGroups).flat();
-      const onlineMonitors = allMonitors.filter(m => m.hasBeenOnline);
-      
-      if (onlineMonitors.length > 0) {
-        const totalUptime = onlineMonitors.reduce((sum, s) => sum + s.uptime, 0) / onlineMonitors.length;
-        const avgUptime = ((totalUptime / (7 * 24 * 60 * 60 * 1000)) * 100).toFixed(2);
-        statsMsg += `Rata-rata uptime: ${avgUptime}%\n`;
-      }
-    }
+  const allMonitors = Object.values(categoryGroups).flat();
+  const onlineMonitors = allMonitors.filter(m => m.hasBeenOnline);
+  const neverOnlineMonitors = allMonitors.filter(m => !m.hasBeenOnline);
+  
+  if (onlineMonitors.length > 0) {
+    const totalUptimePercent = onlineMonitors.reduce((sum, s) => {
+      const uptimeNum = parseFloat(s.uptimePercent);
+      return sum + (isNaN(uptimeNum) ? 0 : uptimeNum);
+    }, 0);
+    const avgUptime = (totalUptimePercent / onlineMonitors.length).toFixed(2);
+    statsMsg += `Rata-rata uptime: ${avgUptime}%\n`;
   }
+  
+  // TAMBAHAN: Tampilkan monitor yang belum pernah online
+  if (neverOnlineMonitors.length > 0) {
+    statsMsg += `⚠️ Monitor belum pernah online: ${neverOnlineMonitors.length}\n`;
+  }
+}
 
   if (await canSendMessage(from)) {
     await new Promise((r) => setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY));
@@ -981,7 +998,7 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
     targetHierarchy = HIERARCHY.pimpinan;
     nextLevel = "pimpinan";
     waitTime = "2 Jam";
-    title = `🚨 ESKALASI LEVEL 2: PIMPINAN (${keysToEscalate.length} Monitor)\n ketik help untuk bantuan;
+    title = `🚨 ESKALASI LEVEL 2: PIMPINAN (${keysToEscalate.length} Monitor)\n ketik help untuk bantuan`;
   }
 
   let body = [];
