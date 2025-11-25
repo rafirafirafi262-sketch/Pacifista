@@ -452,11 +452,6 @@ async function sendStatsMessage(from, isWeekly = false) {
   }
 }
 
-
-        statsMsg += `\n`;
-      });
-    }
-
     statsMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     statsMsg += `*TOTAL ${isWeekly ? "MINGGU" : "HARI"}:*\n`;
     statsMsg += `Total down: ${totalDownCount}x\n`;
