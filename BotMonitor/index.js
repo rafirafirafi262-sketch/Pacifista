@@ -14,28 +14,48 @@ const pino = require("pino");
 const HIERARCHY_FILE = path.join(__dirname, "hierarchy.json");
 const SESSION_START_FILE = path.join(__dirname, "monitor-sessions.json"); // TAMBAH INI
 
+function extractPhoneFromJid(jid) {
+  if (!jid) return null;
+
+  const user = jid.split("@")[0];
+  const cleanNumber = user.replace(/[^0-9]/g, "");
+
+  if (cleanNumber.startsWith("0")) {
+    return "62" + cleanNumber.substring(1);
+  } else if (!cleanNumber.startsWith("62")) {
+    return "62" + cleanNumber;
+  }
+
+  return cleanNumber;
+}
+
+function normalizeJid(jid) {
+  const phone = extractPhoneFromJid(jid);
+  return phone ? `${phone}@s.whatsapp.net` : null;
+}
+
 // TAMBAH fungsi ini
 function loadMonitorSessions() {
   if (fs.existsSync(SESSION_START_FILE)) {
     try {
       const data = fs.readFileSync(SESSION_START_FILE, "utf-8");
-      
+
       // Cek apakah file kosong
       if (!data || data.trim() === "") {
         console.log("⚠️ File monitor-sessions.json kosong, buat baru");
         return {};
       }
-      
+
       return JSON.parse(data);
     } catch (error) {
       console.error("❌ Error membaca monitor-sessions.json:", error.message);
       console.log("🔄 Membuat file baru...");
-      
+
       // Backup file yang error
       const backupFile = SESSION_START_FILE + ".backup-" + Date.now();
       fs.copyFileSync(SESSION_START_FILE, backupFile);
       console.log(`📦 File lama di-backup ke: ${backupFile}`);
-      
+
       return {};
     }
   }
@@ -45,7 +65,10 @@ function loadMonitorSessions() {
 // TAMBAH fungsi ini
 function saveMonitorSessions() {
   try {
-    fs.writeFileSync(SESSION_START_FILE, JSON.stringify(monitorSessionStart, null, 2));
+    fs.writeFileSync(
+      SESSION_START_FILE,
+      JSON.stringify(monitorSessionStart, null, 2)
+    );
     console.log("💾 Monitor sessions berhasil disimpan");
   } catch (error) {
     console.error("❌ Gagal menyimpan monitor-sessions.json:", error.message);
@@ -54,12 +77,20 @@ function saveMonitorSessions() {
 function loadHierarchy() {
   if (fs.existsSync(HIERARCHY_FILE)) {
     const data = fs.readFileSync(HIERARCHY_FILE, "utf-8");
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+
+    // Normalisasi semua JID saat load
+    return {
+      admin: normalizeJid(parsed.admin) || "6281325186205@s.whatsapp.net",
+      atasan: normalizeJid(parsed.atasan) || "628995897629@s.whatsapp.net",
+      pimpinan: normalizeJid(parsed.pimpinan) || "6285934964784@s.whatsapp.net",
+    };
   }
+
   return {
     admin: "6281325186205@s.whatsapp.net",
     atasan: "628995897629@s.whatsapp.net",
-    pimpinan: "6285934964784@s.whatsapp.net", //isi sesuai nomor yang ingin di set
+    pimpinan: "6285934964784@s.whatsapp.net",
   };
 }
 
@@ -69,13 +100,13 @@ function saveHierarchy(data) {
 
 // KONFIGURASI
 const STATUS_PAGES = [
-   { 
-    name: "CCTV Publik",     
-    slug: "bot-cctvpublic" 
+  {
+    name: "CCTV Publik",
+    slug: "bot-cctvpublic",
   },
-  { 
-    name: "Hotel",         
-    slug: "bot-hotel" 
+  {
+    name: "Hotel",
+    slug: "bot-hotel",
   },
 ];
 
@@ -113,7 +144,6 @@ const maintenanceMode = {};
 const monitorHistory = {}; // Format: { "monitor-key": [{ timestamp, status, duration }] }
 const categoryStats = {};
 
-
 function saveHierarchy(data) {
   fs.writeFileSync(HIERARCHY_FILE, JSON.stringify(data, null, 2));
 }
@@ -123,11 +153,9 @@ let HIERARCHY = loadHierarchy();
 let isChecking = false;
 
 function formatPhoneNumber(number) {
-  number = number.replace(/[^0-9]/g, "");
-  if (!number.startsWith("62")) {
-    number = "62" + number;
-  }
-  return number + "@s.whatsapp.net";
+  const clean = number.replace(/[^0-9]/g, "");
+  const withCountry = clean.startsWith('62') ? clean : '62' + clean;
+  return withCountry + "@s.whatsapp.net";
 }
 
 // ===== FUNGSI HISTORY =====
@@ -175,12 +203,14 @@ function getTodayStats(monitorKey) {
   });
 
   const isCurrentlyOffline = lastStatuses[monitorKey] === "offline";
-  
+
   if (isCurrentlyOffline && monitorDownTime[monitorKey]) {
     const currentDowntime = Date.now() - monitorDownTime[monitorKey].getTime();
     totalDowntime += currentDowntime;
-    
-    console.log(`⚠️ ${monitorKey} sedang offline: +${formatDuration(currentDowntime)}`);
+
+    console.log(
+      `⚠️ ${monitorKey} sedang offline: +${formatDuration(currentDowntime)}`
+    );
   }
 
   const hasBeenOnline = monitorSessionStart[monitorKey] !== undefined;
@@ -208,17 +238,19 @@ function getWeeklyStats(monitorKey) {
   });
 
   const isCurrentlyOffline = lastStatuses[monitorKey] === "offline";
-  
+
   if (isCurrentlyOffline && monitorDownTime[monitorKey]) {
     // Monitor sedang offline SEKARANG, hitung durasi real-time
     const currentDowntime = Date.now() - monitorDownTime[monitorKey].getTime();
     totalDowntime += currentDowntime;
-    
-    console.log(`⚠️ ${monitorKey} sedang offline: +${formatDuration(currentDowntime)}`);
+
+    console.log(
+      `⚠️ ${monitorKey} sedang offline: +${formatDuration(currentDowntime)}`
+    );
   }
 
   const hasBeenOnline = monitorSessionStart[monitorKey] !== undefined;
-  
+
   // ===== FIX UTAMA DI SINI =====
   let monitoringPeriod = 0;
   let uptime = 0;
@@ -227,13 +259,13 @@ function getWeeklyStats(monitorKey) {
   if (hasBeenOnline) {
     const sessionStart = monitorSessionStart[monitorKey];
     const periodStart = Math.max(sessionStart, sevenDaysAgo);
-    
+
     // Hitung periode AKTUAL sejak monitor pertama kali online
     monitoringPeriod = Date.now() - periodStart;
-    
+
     // Uptime = periode monitoring - total downtime
     uptime = Math.max(0, monitoringPeriod - totalDowntime);
-    
+
     // Hitung persentase uptime
     if (monitoringPeriod > 0) {
       uptimePercent = ((uptime / monitoringPeriod) * 100).toFixed(2);
@@ -258,7 +290,7 @@ const parseMonitorKey = (key) => {
   const parts = key.split(" - ");
   return {
     category: parts[0],
-    name: parts.slice(1).join(" - ")
+    name: parts.slice(1).join(" - "),
   };
 };
 // ===== FUNGSI UTILITY =====
@@ -282,7 +314,7 @@ function formatDuration(ms) {
 function isQuietHours() {
   const now = new Date();
   const hour = now.getHours();
-  
+
   // Quiet hours: 00:00 - 04:00 (12 malam - 4 pagi)
   return hour >= 0 && hour < 4;
 }
@@ -330,10 +362,14 @@ function parseMaintenanceDuration(durationStr) {
   const unit = match[2].toLowerCase();
 
   switch (unit) {
-    case 'h': return value * 60 * 60 * 1000;
-    case 'm': return value * 60 * 1000;
-    case 'd': return value * 24 * 60 * 60 * 1000;
-    default: return null;
+    case "h":
+      return value * 60 * 60 * 1000;
+    case "m":
+      return value * 60 * 1000;
+    case "d":
+      return value * 24 * 60 * 60 * 1000;
+    default:
+      return null;
   }
 }
 
@@ -363,8 +399,8 @@ async function sendHelpMessage(from) {
   helpMsg += `5. *check*\n`;
   helpMsg += `   Cek status monitor sekarang \n`;
   helpMsg += `   Contoh: \`check\`\n\n`;
-  
-  helpMsg += `6. *maintenance <durasi>*\n`;  // ← TAMBAH BARU
+
+  helpMsg += `6. *maintenance <durasi>*\n`; // ← TAMBAH BARU
   helpMsg += `   Set durasi maintenance custom (contoh: 2h, 30m, 1d)\n`;
   helpMsg += `   Contoh: \`maintenance 2h\`\n\n`;
 
@@ -391,13 +427,13 @@ async function sendStatsMessage(from, isWeekly = false) {
 
   // Group stats by category
   const categoryGroups = {};
-  
+
   for (const key of Object.keys(lastStatuses)) {
     const { category, name } = parseMonitorKey(key);
     if (!categoryGroups[category]) {
       categoryGroups[category] = [];
     }
-    
+
     const stats = isWeekly ? getWeeklyStats(key) : getTodayStats(key);
     categoryGroups[category].push({
       name: name,
@@ -415,7 +451,7 @@ async function sendStatsMessage(from, isWeekly = false) {
     // Display per category
     for (const [category, monitors] of Object.entries(categoryGroups)) {
       statsMsg += `*━━━ ${category} ━━━*\n\n`;
-      
+
       monitors.forEach((stat, idx) => {
         totalDowntime += stat.totalDowntime;
         totalDownCount += stat.downCount;
@@ -424,20 +460,26 @@ async function sendStatsMessage(from, isWeekly = false) {
         statsMsg += `   Status: ${
           lastStatuses[stat.fullKey] === "online" ? "🟢 Online" : "🔴 Offline"
         }\n`;
-        
+
         // Cek apakah monitor pernah online
         if (!stat.hasBeenOnline) {
           statsMsg += `   ⚠️ Belum pernah terdeteksi online\n`;
-          statsMsg += `   Total downtime: ${formatDuration(stat.totalDowntime)}\n`;
+          statsMsg += `   Total downtime: ${formatDuration(
+            stat.totalDowntime
+          )}\n`;
         } else {
-          statsMsg += `   Down ${isWeekly ? "minggu ini" : "hari ini"}: ${stat.downCount}x\n`;
-          statsMsg += `   Total downtime: ${formatDuration(stat.totalDowntime)}\n`;
-          
+          statsMsg += `   Down ${isWeekly ? "minggu ini" : "hari ini"}: ${
+            stat.downCount
+          }x\n`;
+          statsMsg += `   Total downtime: ${formatDuration(
+            stat.totalDowntime
+          )}\n`;
+
           if (isWeekly) {
             statsMsg += `   Uptime: ${stat.uptimePercent}%\n`;
           }
         }
-        
+
         statsMsg += `\n`;
       });
     } // ← KURUNG KURAWAL PENUTUP LOOP KATEGORI
@@ -451,23 +493,25 @@ async function sendStatsMessage(from, isWeekly = false) {
     // Weekly specific stats
     if (isWeekly) {
       const allMonitors = Object.values(categoryGroups).flat();
-      const onlineMonitors = allMonitors.filter(m => m.hasBeenOnline);
-      const neverOnlineMonitors = allMonitors.filter(m => !m.hasBeenOnline);
-      
+      const onlineMonitors = allMonitors.filter((m) => m.hasBeenOnline);
+      const neverOnlineMonitors = allMonitors.filter((m) => !m.hasBeenOnline);
+
       if (onlineMonitors.length > 0) {
         const totalUptimePercent = onlineMonitors.reduce((sum, s) => {
           const uptimeNum = parseFloat(s.uptimePercent);
           return sum + (isNaN(uptimeNum) ? 0 : uptimeNum);
         }, 0);
-        const avgUptime = (totalUptimePercent / onlineMonitors.length).toFixed(2);
+        const avgUptime = (totalUptimePercent / onlineMonitors.length).toFixed(
+          2
+        );
         statsMsg += `Rata-rata uptime: ${avgUptime}%\n`;
       }
-      
+
       if (neverOnlineMonitors.length > 0) {
         statsMsg += `⚠️ Monitor belum pernah online: ${neverOnlineMonitors.length}\n`;
       }
     }
-  } 
+  }
 
   // Send message
   if (await canSendMessage(from)) {
@@ -475,7 +519,7 @@ async function sendStatsMessage(from, isWeekly = false) {
     await sock.sendMessage(from, { text: statsMsg });
     await recordMessageSent(from);
   }
-} 
+}
 async function forceCheckMonitors(from) {
   let msg = `⏳ Sedang melakukan pengecekan status monitor...\n\n`;
 
@@ -490,16 +534,16 @@ async function forceCheckMonitors(from) {
 
   // Group by category
   const categoryGroups = {};
-  
+
   for (const [key, status] of Object.entries(lastStatuses)) {
     const { category, name } = parseMonitorKey(key);
     if (!categoryGroups[category]) {
       categoryGroups[category] = {
         online: [],
-        offline: []
+        offline: [],
       };
     }
-    
+
     if (status === "online") {
       categoryGroups[category].online.push(name);
     } else {
@@ -558,7 +602,7 @@ async function sendWeeklyReport() {
     if (!categoryGroups[category]) {
       categoryGroups[category] = [];
     }
-    
+
     const stats = getWeeklyStats(key);
     categoryGroups[category].push({
       name: name,
@@ -578,7 +622,7 @@ async function sendWeeklyReport() {
 
     for (const [category, monitors] of Object.entries(categoryGroups)) {
       reportMsg += `*【 ${category} 】*\n\n`;
-      
+
       monitors.forEach((stat, idx) => {
         reportMsg += `${idx + 1}. *${stat.name}*\n`;
         reportMsg += `   Status: ${
@@ -586,7 +630,7 @@ async function sendWeeklyReport() {
         }\n`;
         reportMsg += `   Down: ${stat.downCount}x\n`;
         reportMsg += `   Downtime: ${formatDuration(stat.totalDowntime)}\n`;
-        
+
         if (stat.hasBeenOnline) {
           reportMsg += `   Uptime: ${stat.uptimePercent}%\n`;
         } else {
@@ -598,18 +642,23 @@ async function sendWeeklyReport() {
 
     reportMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     reportMsg += `*RINGKASAN MINGGUAN:*\n`;
-    
+
     const totalMonitors = Object.values(categoryGroups).flat().length;
     reportMsg += `Total Monitor: ${totalMonitors}\n`;
     reportMsg += `Total Down: ${totalDownCount}x\n`;
     reportMsg += `Total Downtime: ${formatDuration(totalDowntime)}\n`;
 
     const allMonitors = Object.values(categoryGroups).flat();
-    const onlineMonitors = allMonitors.filter(m => m.hasBeenOnline);
-    
+    const onlineMonitors = allMonitors.filter((m) => m.hasBeenOnline);
+
     if (onlineMonitors.length > 0) {
-      const totalUptime = onlineMonitors.reduce((sum, s) => sum + s.uptime, 0) / onlineMonitors.length;
-      const avgUptime = ((totalUptime / (7 * 24 * 60 * 60 * 1000)) * 100).toFixed(2);
+      const totalUptime =
+        onlineMonitors.reduce((sum, s) => sum + s.uptime, 0) /
+        onlineMonitors.length;
+      const avgUptime = (
+        (totalUptime / (7 * 24 * 60 * 60 * 1000)) *
+        100
+      ).toFixed(2);
       reportMsg += `Rata-rata Uptime: ${avgUptime}%\n`;
     }
   }
@@ -709,7 +758,7 @@ async function cekStatusMonitor() {
     console.log("⏳ Pengecekan sebelumnya belum selesai, skip...");
     return;
   }
-   // ===== CEK QUIET HOURS =====
+  // ===== CEK QUIET HOURS =====
   if (isQuietHours()) {
     console.log("🌙 QUIET HOURS AKTIF (00:00-04:00) - Skip monitoring");
     return;
@@ -800,10 +849,10 @@ async function cekStatusMonitor() {
             }
           } else {
             if (!monitorSessionStart[key]) {
-                monitorSessionStart[key] = Date.now();
-               saveMonitorSessions(); // TAMBAH INI
-               //console.log(`🟢 ${key} pertama kali terdeteksi online`);
-          }
+              monitorSessionStart[key] = Date.now();
+              saveMonitorSessions(); // TAMBAH INI
+              //console.log(`🟢 ${key} pertama kali terdeteksi online`);
+            }
             if (sentOffline[key]) {
               const downTime = monitorDownTime[key];
               const duration = Date.now() - downTime.getTime();
@@ -1122,20 +1171,20 @@ async function connectToWhatsApp() {
 
     console.log(`📂 Session loaded (Baileys v${version.join(".")})`);
 
-  sock = makeWASocket({
-  auth: state,
-  logger: pino({ level: "silent" }),
-  browser: ["CCTV Monitoring", "Chrome", "1.0.0"],
-  
-  defaultQueryTimeoutMs: 120000,  // Dari 60000 → 120000 (2 menit)
-  connectTimeoutMs: 120000,       // Dari 60000 → 120000 (2 menit)
-  keepAliveIntervalMs: 20000,     // Dari 30000 → 20000 (lebih sering ping)
+    sock = makeWASocket({
+      auth: state,
+      logger: pino({ level: "silent" }),
+      browser: ["CCTV Monitoring", "Chrome", "1.0.0"],
 
-  retryRequestDelayMs: 5000,      // Delay antar retry request
-  maxMsgRetryCount: 5,            // Max retry untuk pesan
-  
-  printQRInTerminal: false,
-});
+      defaultQueryTimeoutMs: 120000, // Dari 60000 → 120000 (2 menit)
+      connectTimeoutMs: 120000, // Dari 60000 → 120000 (2 menit)
+      keepAliveIntervalMs: 20000, // Dari 30000 → 20000 (lebih sering ping)
+
+      retryRequestDelayMs: 5000, // Delay antar retry request
+      maxMsgRetryCount: 5, // Max retry untuk pesan
+
+      printQRInTerminal: false,
+    });
 
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
@@ -1160,11 +1209,11 @@ async function connectToWhatsApp() {
         console.log(`   Error: ${errorMsg}\n`);
 
         if (statusCode === 408 || statusCode === DisconnectReason.timedOut) {
-        console.log("⏱️ TIMEOUT - Mencoba reconnect...");
-        await new Promise((resolve) => setTimeout(resolve, 15000)); // Tunggu 15 detik
-        connectToWhatsApp();
-        return;
-      }
+          console.log("⏱️ TIMEOUT - Mencoba reconnect...");
+          await new Promise((resolve) => setTimeout(resolve, 15000)); // Tunggu 15 detik
+          connectToWhatsApp();
+          return;
+        }
 
         if (statusCode === DisconnectReason.badSession) {
           console.log("❌ BAD SESSION - Regenerating...");
@@ -1183,10 +1232,10 @@ async function connectToWhatsApp() {
           return;
         }
         if (!statusCode || statusCode === DisconnectReason.connectionLost) {
-        console.log("🔌 CONNECTION LOST - Reconnecting...");
-        await new Promise((resolve) => setTimeout(resolve, 10000));
-        connectToWhatsApp();
-        return;
+          console.log("🔌 CONNECTION LOST - Reconnecting...");
+          await new Promise((resolve) => setTimeout(resolve, 10000));
+          connectToWhatsApp();
+          return;
         }
 
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
@@ -1200,7 +1249,7 @@ async function connectToWhatsApp() {
         console.log("✅ Berhasil terhubung ke WhatsApp!");
         isConnecting = false;
 
-             // Inisialisasi session start untuk monitor yang sudah ada
+        // Inisialisasi session start untuk monitor yang sudah ada
         for (const key of Object.keys(lastStatuses)) {
           if (lastStatuses[key] === "online" && !monitorSessionStart[key]) {
             monitorSessionStart[key] = Date.now();
@@ -1240,191 +1289,81 @@ async function connectToWhatsApp() {
       }
     });
 
-   sock.ev.on("messages.upsert", async ({ messages }) => {
-  const msg = messages[0];
-  if (!msg.message || !msg.key.remoteJid) return;
+    sock.ev.on("messages.upsert", async ({ messages }) => {
+      const msg = messages[0];
+      if (!msg.message || !msg.key.remoteJid) return;
+      // Ambil JID pengirim - prioritaskan participant (untuk grup), fallback ke remoteJid
+      const senderJid = msg.key.participant || msg.key.remoteJid;
 
-  const from = msg.key.remoteJid;
-  
-  const textMsg = (
-    msg.message.conversation ||
-    msg.message.extendedTextMessage?.text ||
-    ""
-  )
-    .toLowerCase()
-    .trim();
+      // Normalisasi ke format @s.whatsapp.net
+      const realSender = normalizeJid(senderJid);
 
-  // ✅ FUNGSI NORMALISASI JID (SUPPORT @lid)
-  function getNormalizedSender() {
-    // Jika pesan dari linked device (@lid), cari nomor asli
-    if (from.includes('@lid')) {
-      // Cek participant (untuk pesan dari linked device)
-      const participant = msg.key.participant || msg.participant;
-      if (participant && participant.includes('@s.whatsapp.net')) {
-        console.log(`🔗 Linked device: ${from} → Real number: ${participant}`);
-        return participant;
+      if (!realSender) {
+        console.error(`❌ Gagal menormalisasi JID: ${senderJid}`);
+        return;
       }
-    }
-    return from;
-  }
 
-  const realSender = getNormalizedSender();
-  
-  // ✅ DEBUG LOG (bisa dihapus setelah testing)
-  if (from !== realSender) {
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("📱 Device JID:", from);
-    console.log("📞 Real Number:", realSender);
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-  }
-
-  // ✅ CEK AUTHORIZATION
-  const isAuthorized = 
-    realSender === HIERARCHY.admin ||
-    realSender === HIERARCHY.atasan ||
-    realSender === HIERARCHY.pimpinan;
-
-  if (!isAuthorized) {
-    return;
-  }
-
-  // ===== COMMAND: HELP =====
-  if (textMsg === "help") {
-    console.log(`❓ Help diminta dari ${realSender}`);
-    await sendHelpMessage(from); // Kirim ke 'from' (device), bukan 'realSender'
-    return;
-  }
-
-  // ===== COMMAND: STATS =====
-  if (textMsg === "stats") {
-    console.log(`📊 Stats diminta dari ${realSender}`);
-    await sendStatsMessage(from, false);
-    return;
-  }
-
-  // ===== COMMAND: WEEKLY =====
-  if (textMsg === "weekly") {
-    console.log(`📊 Weekly stats diminta dari ${realSender}`);
-    await sendStatsMessage(from, true);
-    return;
-  }
-
-  // ===== COMMAND: CHECK =====
-  if (textMsg === "check") {
-    console.log(`🔄 Force-check diminta dari ${realSender}`);
-    await forceCheckMonitors(from);
-    return;
-  }
-
-  // ===== COMMAND: OK (KONFIRMASI) =====
-  if (textMsg.startsWith("ok")) {
-    console.log(`✅ Konfirmasi diterima dari ${realSender}`);
-
-    const confirmedMonitors = handleAcknowledgement(realSender); // ← Pakai realSender
-
-    if (confirmedMonitors.length > 0) {
-      const maintenanceEndTime = new Date(
-        Date.now() + 60 * 60 * 1000
-      ).toLocaleString("id-ID", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-
-      let responseMsg = `✅ *KONFIRMASI DITERIMA*\n`;
-      responseMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-      responseMsg += `🔧 *STATUS: MODE MAINTENANCE*\n`;
-      responseMsg += `⏰ Durasi: 1 Jam\n`;
-      responseMsg += `📅 Sampai: ${maintenanceEndTime}\n\n`;
-      responseMsg += `*Monitor yang masuk maintenance:*\n`;
-
-      confirmedMonitors.forEach((monitor, idx) => {
-        responseMsg += `${idx + 1}. ${monitor}\n`;
-      });
-
-      responseMsg += `\n_Monitor ini tidak akan dipantau selama 1 jam._`;
-      responseMsg += `\n_Eskalasi otomatis dihentikan._`;
-
-      if (await canSendMessage(from)) {
-        await new Promise((r) =>
-          setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
-        );
-        await sock.sendMessage(from, { text: responseMsg });
-        await recordMessageSent(from);
-      }
-    } else {
-      const noMonitorMsg = `ℹ️ Tidak ada monitor aktif yang perlu dikonfirmasi saat ini.`;
-
-      if (await canSendMessage(from)) {
-        await new Promise((r) =>
-          setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
-        );
-        await sock.sendMessage(from, { text: noMonitorMsg });
-        await recordMessageSent(from);
-      }
-    }
-    return;
-  }
-
-  // ===== COMMAND: STATUS / MAINTENANCE =====
-  if (textMsg === "status" || textMsg === "maintenance") {
-    let statusMsg = `📊 *STATUS MAINTENANCE*\n`;
-    statusMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-    const activeMaintenances = Object.entries(maintenanceMode);
-
-    if (activeMaintenances.length === 0) {
-      statusMsg += `✅ Tidak ada monitor dalam mode maintenance.`;
-    } else {
-      statusMsg += `🔧 Monitor dalam maintenance:\n\n`;
-
-      activeMaintenances.forEach(([key, endTime], idx) => {
-        const timeLeft = endTime - Date.now();
-        const minutesLeft = Math.ceil(timeLeft / 60000);
-        const endTimeStr = new Date(endTime).toLocaleString("id-ID", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-
-        statusMsg += `${idx + 1}. *${key}*\n`;
-        statusMsg += `   ⏰ Selesai: ${endTimeStr} (${minutesLeft} menit lagi)\n\n`;
-      });
-    }
-
-    if (await canSendMessage(from)) {
-      await new Promise((r) =>
-        setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+      // Debug log (bisa dihapus setelah berfungsi)
+      console.log(
+        `📥 Pesan dari: ${msg.key.remoteJid} | Sender: ${senderJid} | Normalized: ${realSender}`
       );
-      await sock.sendMessage(from, { text: statusMsg });
-      await recordMessageSent(from);
-    }
-    return;
-  }
+      // Cek otentikasi dengan JID yang sudah dinormalisasi
+      const isAuthorized =
+        realSender === HIERARCHY.admin ||
+        realSender === HIERARCHY.atasan ||
+        realSender === HIERARCHY.pimpinan;
 
-  // ===== COMMAND: MAINTENANCE <DURATION> =====
-  if (textMsg.startsWith("maintenance ")) {
-    const args = textMsg.split(" ");
-    if (args.length === 2) {
-      const durationStr = args[1];
-      const durationMs = parseMaintenanceDuration(durationStr);
+      if (!isAuthorized) {
+        console.log(`❌ Unauthorized: ${realSender}`);
+        return;
+      }
 
-      if (durationMs) {
-        let latestDownMonitor = null;
-        let latestDownTime = 0;
+      // ✅ DEBUG LOG (bisa dihapus setelah testing)
+      if (from !== realSender) {
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("📱 Device JID:", from);
+        console.log("📞 Real Number:", realSender);
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+      }
 
-        for (const [key, downTime] of Object.entries(monitorDownTime)) {
-          if (downTime.getTime() > latestDownTime) {
-            latestDownTime = downTime.getTime();
-            latestDownMonitor = key;
-          }
-        }
+      // ===== COMMAND: HELP =====
+      if (textMsg === "help") {
+        console.log(`❓ Help diminta dari ${realSender}`);
+        await sendHelpMessage(from); // Kirim ke 'from' (device), bukan 'realSender'
+        return;
+      }
 
-        if (latestDownMonitor) {
-          const endTime = addToMaintenance(latestDownMonitor, durationMs);
-          const durationStrFormatted = formatDuration(durationMs);
-          const endTimeStr = new Date(endTime).toLocaleString("id-ID", {
+      // ===== COMMAND: STATS =====
+      if (textMsg === "stats") {
+        console.log(`📊 Stats diminta dari ${realSender}`);
+        await sendStatsMessage(from, false);
+        return;
+      }
+
+      // ===== COMMAND: WEEKLY =====
+      if (textMsg === "weekly") {
+        console.log(`📊 Weekly stats diminta dari ${realSender}`);
+        await sendStatsMessage(from, true);
+        return;
+      }
+
+      // ===== COMMAND: CHECK =====
+      if (textMsg === "check") {
+        console.log(`🔄 Force-check diminta dari ${realSender}`);
+        await forceCheckMonitors(from);
+        return;
+      }
+
+      // ===== COMMAND: OK (KONFIRMASI) =====
+      if (textMsg.startsWith("ok")) {
+        console.log(`✅ Konfirmasi diterima dari ${realSender}`);
+
+        const confirmedMonitors = handleAcknowledgement(realSender); // ← Pakai realSender
+
+        if (confirmedMonitors.length > 0) {
+          const maintenanceEndTime = new Date(
+            Date.now() + 60 * 60 * 1000
+          ).toLocaleString("id-ID", {
             day: "2-digit",
             month: "2-digit",
             year: "numeric",
@@ -1432,11 +1371,19 @@ async function connectToWhatsApp() {
             minute: "2-digit",
           });
 
-          let responseMsg = `✅ *MAINTENANCE DURATION DIUBAH*\n`;
+          let responseMsg = `✅ *KONFIRMASI DITERIMA*\n`;
           responseMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-          responseMsg += `🔧 Monitor: ${latestDownMonitor}\n`;
-          responseMsg += `⏰ Durasi Baru: ${durationStrFormatted}\n`;
-          responseMsg += `📅 Sampai: ${endTimeStr}\n`;
+          responseMsg += `🔧 *STATUS: MODE MAINTENANCE*\n`;
+          responseMsg += `⏰ Durasi: 1 Jam\n`;
+          responseMsg += `📅 Sampai: ${maintenanceEndTime}\n\n`;
+          responseMsg += `*Monitor yang masuk maintenance:*\n`;
+
+          confirmedMonitors.forEach((monitor, idx) => {
+            responseMsg += `${idx + 1}. ${monitor}\n`;
+          });
+
+          responseMsg += `\n_Monitor ini tidak akan dipantau selama 1 jam._`;
+          responseMsg += `\n_Eskalasi otomatis dihentikan._`;
 
           if (await canSendMessage(from)) {
             await new Promise((r) =>
@@ -1446,78 +1393,170 @@ async function connectToWhatsApp() {
             await recordMessageSent(from);
           }
         } else {
-          const noDownMsg = `ℹ️ Tidak ada monitor yang sedang down saat ini.`;
+          const noMonitorMsg = `ℹ️ Tidak ada monitor aktif yang perlu dikonfirmasi saat ini.`;
+
           if (await canSendMessage(from)) {
             await new Promise((r) =>
               setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
             );
-            await sock.sendMessage(from, { text: noDownMsg });
+            await sock.sendMessage(from, { text: noMonitorMsg });
             await recordMessageSent(from);
           }
         }
-      } else {
-        const invalidMsg = `❌ Format tidak valid. Gunakan: maintenance 2h, maintenance 30m, atau maintenance 1d`;
+        return;
+      }
+
+      // ===== COMMAND: STATUS / MAINTENANCE =====
+      if (textMsg === "status" || textMsg === "maintenance") {
+        let statusMsg = `📊 *STATUS MAINTENANCE*\n`;
+        statusMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+        const activeMaintenances = Object.entries(maintenanceMode);
+
+        if (activeMaintenances.length === 0) {
+          statusMsg += `✅ Tidak ada monitor dalam mode maintenance.`;
+        } else {
+          statusMsg += `🔧 Monitor dalam maintenance:\n\n`;
+
+          activeMaintenances.forEach(([key, endTime], idx) => {
+            const timeLeft = endTime - Date.now();
+            const minutesLeft = Math.ceil(timeLeft / 60000);
+            const endTimeStr = new Date(endTime).toLocaleString("id-ID", {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+
+            statusMsg += `${idx + 1}. *${key}*\n`;
+            statusMsg += `   ⏰ Selesai: ${endTimeStr} (${minutesLeft} menit lagi)\n\n`;
+          });
+        }
+
         if (await canSendMessage(from)) {
           await new Promise((r) =>
             setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
           );
-          await sock.sendMessage(from, { text: invalidMsg });
+          await sock.sendMessage(from, { text: statusMsg });
           await recordMessageSent(from);
         }
+        return;
       }
-    }
-    return;
-  }
 
-  // ===== COMMAND: SET ADMIN / ATASAN / PIMPINAN =====
-  if (
-    textMsg.startsWith("set admin") ||
-    textMsg.startsWith("set atasan") ||
-    textMsg.startsWith("set pimpinan")
-  ) {
-    if (realSender !== HIERARCHY.admin) { // ← Pakai realSender
-      const notAllowedMsg = `❌ Hanya admin yang bisa mengubah nomor hierarki.`;
-      if (await canSendMessage(from)) {
-        await sock.sendMessage(from, { text: notAllowedMsg });
-        await recordMessageSent(from);
+      // ===== COMMAND: MAINTENANCE <DURATION> =====
+      if (textMsg.startsWith("maintenance ")) {
+        const args = textMsg.split(" ");
+        if (args.length === 2) {
+          const durationStr = args[1];
+          const durationMs = parseMaintenanceDuration(durationStr);
+
+          if (durationMs) {
+            let latestDownMonitor = null;
+            let latestDownTime = 0;
+
+            for (const [key, downTime] of Object.entries(monitorDownTime)) {
+              if (downTime.getTime() > latestDownTime) {
+                latestDownTime = downTime.getTime();
+                latestDownMonitor = key;
+              }
+            }
+
+            if (latestDownMonitor) {
+              const endTime = addToMaintenance(latestDownMonitor, durationMs);
+              const durationStrFormatted = formatDuration(durationMs);
+              const endTimeStr = new Date(endTime).toLocaleString("id-ID", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              });
+
+              let responseMsg = `✅ *MAINTENANCE DURATION DIUBAH*\n`;
+              responseMsg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+              responseMsg += `🔧 Monitor: ${latestDownMonitor}\n`;
+              responseMsg += `⏰ Durasi Baru: ${durationStrFormatted}\n`;
+              responseMsg += `📅 Sampai: ${endTimeStr}\n`;
+
+              if (await canSendMessage(from)) {
+                await new Promise((r) =>
+                  setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+                );
+                await sock.sendMessage(from, { text: responseMsg });
+                await recordMessageSent(from);
+              }
+            } else {
+              const noDownMsg = `ℹ️ Tidak ada monitor yang sedang down saat ini.`;
+              if (await canSendMessage(from)) {
+                await new Promise((r) =>
+                  setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+                );
+                await sock.sendMessage(from, { text: noDownMsg });
+                await recordMessageSent(from);
+              }
+            }
+          } else {
+            const invalidMsg = `❌ Format tidak valid. Gunakan: maintenance 2h, maintenance 30m, atau maintenance 1d`;
+            if (await canSendMessage(from)) {
+              await new Promise((r) =>
+                setTimeout(r, ANTI_SPAM_CONFIG.BATCH_SEND_DELAY)
+              );
+              await sock.sendMessage(from, { text: invalidMsg });
+              await recordMessageSent(from);
+            }
+          }
+        }
+        return;
       }
-      return;
-    }
 
-    const parts = textMsg.split(" ");
-    if (parts.length !== 3) {
-      const usageMsg = `❌ Format salah. Gunakan:\nset admin 6285xxx\nset atasan 6281xxx\nset pimpinan 6289xxx`;
-      if (await canSendMessage(from)) {
-        await sock.sendMessage(from, { text: usageMsg });
-        await recordMessageSent(from);
+      // ===== COMMAND: SET ADMIN / ATASAN / PIMPINAN =====
+      if (
+        textMsg.startsWith("set admin") ||
+        textMsg.startsWith("set atasan") ||
+        textMsg.startsWith("set pimpinan")
+      ) {
+        if (realSender !== HIERARCHY.admin) {
+          // ← Pakai realSender
+          const notAllowedMsg = `❌ Hanya admin yang bisa mengubah nomor hierarki.`;
+          if (await canSendMessage(from)) {
+            await sock.sendMessage(from, { text: notAllowedMsg });
+            await recordMessageSent(from);
+          }
+          return;
+        }
+
+        const parts = textMsg.split(" ");
+        if (parts.length !== 3) {
+          const usageMsg = `❌ Format salah. Gunakan:\nset admin 6285xxx\nset atasan 6281xxx\nset pimpinan 6289xxx`;
+          if (await canSendMessage(from)) {
+            await sock.sendMessage(from, { text: usageMsg });
+            await recordMessageSent(from);
+          }
+          return;
+        }
+
+        const role = parts[1];
+        const rawNumber = parts[2];
+        const formattedNumber = formatPhoneNumber(rawNumber);
+
+        if (!["admin", "atasan", "pimpinan"].includes(role)) {
+          const invalidRoleMsg = `❌ Role tidak valid. Gunakan: admin, atasan, atau pimpinan.`;
+          if (await canSendMessage(from)) {
+            await sock.sendMessage(from, { text: invalidRoleMsg });
+            await recordMessageSent(from);
+          }
+          return;
+        }
+
+        HIERARCHY[role] = formattedNumber;
+        saveHierarchy(HIERARCHY);
+
+        const successMsg = `✅ Nomor ${role} berhasil diubah menjadi: ${formattedNumber}`;
+        if (await canSendMessage(from)) {
+          await sock.sendMessage(from, { text: successMsg });
+          await recordMessageSent(from);
+        }
+        return;
       }
-      return;
-    }
-
-    const role = parts[1];
-    const rawNumber = parts[2];
-    const formattedNumber = formatPhoneNumber(rawNumber);
-
-    if (!["admin", "atasan", "pimpinan"].includes(role)) {
-      const invalidRoleMsg = `❌ Role tidak valid. Gunakan: admin, atasan, atau pimpinan.`;
-      if (await canSendMessage(from)) {
-        await sock.sendMessage(from, { text: invalidRoleMsg });
-        await recordMessageSent(from);
-      }
-      return;
-    }
-
-    HIERARCHY[role] = formattedNumber;
-    saveHierarchy(HIERARCHY);
-
-    const successMsg = `✅ Nomor ${role} berhasil diubah menjadi: ${formattedNumber}`;
-    if (await canSendMessage(from)) {
-      await sock.sendMessage(from, { text: successMsg });
-      await recordMessageSent(from);
-    }
-    return;
-  }
-});
+    });
 
     sock.ev.on("creds.update", saveCreds);
   } catch (err) {
