@@ -315,8 +315,8 @@ function isQuietHours() {
   const now = new Date();
   const hour = now.getHours();
 
-  // Quiet hours: 00:00 - 04:00 (12 malam - 4 pagi)
-  return hour >= 0 && hour < 4;
+  // Quiet hours: 23:00 - 05:00 (11 malam - 5 pagi)
+  return hour >= 23 && hour < 5;
 }
 
 // ===== FUNGSI MAINTENANCE MODE =====
@@ -376,7 +376,7 @@ function parseMaintenanceDuration(durationStr) {
 // ===== FUNGSI HELP =====
 async function sendHelpMessage(from) {
   let helpMsg = `*📚 PANDUAN PERINTAH BOT MONITORING*\n`;
-  helpMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  helpMsg += `━━━━━━━━━━━━\n\n`;
 
   helpMsg += `*PERINTAH DASAR:*\n\n`;
 
@@ -388,24 +388,24 @@ async function sendHelpMessage(from) {
   helpMsg += `   Lihat monitor yang sedang dalam mode maintenance\n`;
   helpMsg += `   Contoh: \`status\`\n\n`;
 
-  helpMsg += `3. *stats*\n`;
-  helpMsg += `   Lihat statistik uptime & downtime hari ini\n`;
-  helpMsg += `   Contoh: \`stats\`\n\n`;
-
-  helpMsg += `4. *weekly*\n`;
-  helpMsg += `   Lihat statistik uptime & downtime 7 hari terakhir\n`;
-  helpMsg += `   Contoh: \`weekly\`\n\n`;
-
-  helpMsg += `5. *check*\n`;
+  helpMsg += `3. *check*\n`;
   helpMsg += `   Cek status monitor sekarang \n`;
   helpMsg += `   Contoh: \`check\`\n\n`;
+  
+  helpMsg += `4. *daily*\n`;
+  helpMsg += `   Lihat statistik uptime & downtime hari ini\n`;
+  helpMsg += `   Contoh: \`daily\`\n\n`;
+
+  helpMsg += `5. *weekly*\n`;
+  helpMsg += `   Lihat statistik uptime & downtime 7 hari terakhir\n`;
+  helpMsg += `   Contoh: \`weekly\`\n\n`;
 
   helpMsg += `6. *maintenance <durasi>*\n`; // ← TAMBAH BARU
   helpMsg += `   Set durasi maintenance custom (contoh: 2h, 30m, 1d)\n`;
   helpMsg += `   Contoh: \`maintenance 2h\`\n\n`;
 
   helpMsg += `\n*PERINTAH ADMIN:*\n\n`;
-  helpMsg += `6. *set admin/atasan/pimpinan <nomor>*\n`;
+  helpMsg += `7. *set admin/atasan/pimpinan <nomor>*\n`;
   helpMsg += `   Ubah nomor admin (hanya admin saat ini)\n`;
   helpMsg += `   Contoh: \`set admin 628xxxxxxxxxx\`\n\n`;
 
@@ -1035,7 +1035,7 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
     targetHierarchy = HIERARCHY.pimpinan;
     nextLevel = "pimpinan";
     waitTime = "2 Jam";
-    title = `🚨 ESKALASI LEVEL 2: PIMPINAN (${keysToEscalate.length} Monitor)\n ketik help untuk bantuan`;
+    title = `*🚨 ESKALASI LEVEL 2: PIMPINAN* (${keysToEscalate.length} Monitor)\n ketik help untuk bantuan`;
   }
 
   let body = [];
@@ -1335,9 +1335,9 @@ async function connectToWhatsApp() {
         return;
       }
 
-      // ===== COMMAND: STATS =====
-      if (textMsg === "stats") {
-        console.log(`📊 Stats diminta dari ${realSender}`);
+      // ===== COMMAND: DAILY =====
+      if (textMsg === "daily") {
+        console.log(`📊 rekap daily diminta dari ${realSender}`);
         await sendStatsMessage(from, false);
         return;
       }
@@ -1614,7 +1614,7 @@ process.on("unhandledRejection", (err) => {
 console.log("╔════════════════════════════════════════════════════════╗");
 console.log("║                 BOT MONITORING CCTV                    ║");
 console.log("║     Cek: 10 menit | Eskalasi: 1 jam | Weekly Report    ║");
-console.log("║           Fitur: Help, Stats, Force-Check              ║");
+console.log("║        Fitur: Help, Daily, Weekly, Force-Check         ║");
 console.log("╚════════════════════════════════════════════════════════╝\n");
 
 connectToWhatsApp();
