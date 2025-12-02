@@ -81,16 +81,16 @@ function loadHierarchy() {
 
     // Normalisasi semua JID saat load
     return {
-      admin: normalizeJid(parsed.admin) || "6281325186205@s.whatsapp.net",
-      atasan: normalizeJid(parsed.atasan) || "628995897629@s.whatsapp.net",
-      pimpinan: normalizeJid(parsed.pimpinan) || "6285934964784@s.whatsapp.net",
+      admin: normalizeJid(parsed.admin) || "628@s.whatsapp.net",
+      atasan: normalizeJid(parsed.atasan) || "628@s.whatsapp.net",
+      pimpinan: normalizeJid(parsed.pimpinan) || "628@s.whatsapp.net",
     };
   }
 
   return {
-    admin: "6281325186205@s.whatsapp.net",
-    atasan: "628995897629@s.whatsapp.net",
-    pimpinan: "6285934964784@s.whatsapp.net",
+    admin: "62@s.whatsapp.net",
+    atasan: "62@s.whatsapp.net",
+    pimpinan: "62@s.whatsapp.net",
   };
 }
 
