@@ -81,9 +81,9 @@ function loadHierarchy() {
 
     // Normalisasi semua JID saat load
     return {
-      admin: normalizeJid(parsed.admin) || "628@s.whatsapp.net",
-      atasan: normalizeJid(parsed.atasan) || "628@s.whatsapp.net",
-      pimpinan: normalizeJid(parsed.pimpinan) || "628@s.whatsapp.net",
+      admin: normalizeJid(parsed.admin) || "62@s.whatsapp.net",
+      atasan: normalizeJid(parsed.atasan) || "62@s.whatsapp.net",
+      pimpinan: normalizeJid(parsed.pimpinan) || "62@s.whatsapp.net",
     };
   }
 
@@ -316,7 +316,7 @@ function isQuietHours() {
   const hour = now.getHours();
 
   // Quiet hours: 23:00 - 05:00 (11 malam - 5 pagi)
-  return hour >= 23 && hour < 5;
+  return hour >= 23 || hour < 5;
 }
 
 // ===== FUNGSI MAINTENANCE MODE =====
@@ -391,7 +391,7 @@ async function sendHelpMessage(from) {
   helpMsg += `3. *check*\n`;
   helpMsg += `   Cek status monitor sekarang \n`;
   helpMsg += `   Contoh: \`check\`\n\n`;
-  
+
   helpMsg += `4. *daily*\n`;
   helpMsg += `   Lihat statistik uptime & downtime hari ini\n`;
   helpMsg += `   Contoh: \`daily\`\n\n`;
@@ -758,11 +758,6 @@ async function cekStatusMonitor() {
     console.log("⏳ Pengecekan sebelumnya belum selesai, skip...");
     return;
   }
-  // ===== CEK QUIET HOURS =====
-  if (isQuietHours()) {
-    console.log("🌙 QUIET HOURS AKTIF (00:00-04:00) - Skip monitoring");
-    return;
-  }
 
   isChecking = true;
   console.log("🔍 Mengecek status monitor...", new Date().toLocaleTimeString());
@@ -1021,6 +1016,12 @@ async function runEscalationChecks() {
 async function sendBatchEscalation(targetLevel, keysToEscalate) {
   if (keysToEscalate.length === 0) return;
 
+  if (isQuietHours()) {
+    console.log(`🌙 QUIET HOURS - Skip pengiriman eskalasi ke ${targetLevel}`);
+    console.log(`   Monitor yang di-skip: ${keysToEscalate.join(", ")}`);
+    return;
+  }
+
   let targetHierarchy;
   let title;
   let nextLevel;
@@ -1030,12 +1031,12 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
     targetHierarchy = HIERARCHY.atasan;
     nextLevel = "atasan";
     waitTime = "1 Jam";
-    title = `⚠️ ESKALASI LEVEL 1: ATASAN (${keysToEscalate.length} Monitor)\n ketik help untuk bantuan`;
+    title = `*⚠️ ESKALASI LEVEL 1: ATASAN * (${keysToEscalate.length} Monitor)\n ketik  "help" untuk bantuan`;
   } else {
     targetHierarchy = HIERARCHY.pimpinan;
     nextLevel = "pimpinan";
     waitTime = "2 Jam";
-    title = `*🚨 ESKALASI LEVEL 2: PIMPINAN* (${keysToEscalate.length} Monitor)\n ketik help untuk bantuan`;
+    title = `*🚨 ESKALASI LEVEL 2: PIMPINAN* (${keysToEscalate.length} Monitor)\n ketik "help" untuk bantuan`;
   }
 
   let body = [];
@@ -1062,7 +1063,7 @@ async function sendBatchEscalation(targetLevel, keysToEscalate) {
   }
 
   const finalMessage =
-    `*${title}*\n` +
+    `${title}\n` +
     `____________________________\n` +
     `Status: ${waitTime} telah berlalu tanpa konfirmasi.\n\n` +
     `*DAFTAR MONITOR:*\n` +
@@ -1298,7 +1299,7 @@ async function connectToWhatsApp() {
       // Normalisasi ke format @s.whatsapp.net
       const realSender = normalizeJid(senderJid);
       const from = msg.key.remoteJid;               // tempat pengirim pesan (device / grup)
-      const sender = realSender;   
+      const sender = realSender;
 
       if (!realSender) {
         console.error(`❌ Gagal menormalisasi JID: ${senderJid}`);
@@ -1319,6 +1320,11 @@ async function connectToWhatsApp() {
         console.log(`❌ Unauthorized: ${realSender}`);
         return;
       }
+      const textMsg = (
+      msg.message?.conversation ||
+      msg.message?.extendedTextMessage?.text ||
+      ""
+    ).toLowerCase().trim();
 
       // ✅ DEBUG LOG (bisa dihapus setelah testing)
       if (from !== realSender) {
